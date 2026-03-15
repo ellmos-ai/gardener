@@ -141,6 +141,53 @@ af.materialize("datei.pdf")         # DB → Datei (rematerialisieren)
 python seed.py    # Fuellt gardener.db mit Grundwissen und Beispiel-Tools
 ```
 
+## Vergleich: Gardener vs Rinnsal
+
+Gardener und [Rinnsal](https://github.com/ellmos-ai/rinnsal) sind beide leichtgewichtige
+LLM-OSes aus dem ellmos-Oekosystem. Hier die Unterschiede im Detail:
+
+| Feature | Detail | **Gardener** | **Rinnsal** |
+|---|---|---|---|
+| **Kern-API** | Stil | 4 Funktionen (find/get/put/run) | ~20 CLI-Kommandos, Modul-basiert |
+| **Datenmodell** | Tabellen | 1 (`everything` + Typ-Feld) | 4+ (facts, notes, lessons, sessions) |
+| | FTS5 Suche | Ja (Kern-Feature, IST das Gedaechtnis) | Nein (strukturierte Queries) |
+| **Memory** | Working | memo() mit Decay | notes (Session-scoped) |
+| | Langzeit | lesson() + Gewichtung | facts (Confidence-Score) |
+| | Konsolidierung | consolidate() (Decay+Forget) | Nein |
+| | Recall/Boost | recall() boostet Gewicht | Nein |
+| | Context-Export | Nein | api.context() (LLM-ready) |
+| **Tasks** | Prioritaeten | Ja (meta-Feld) | critical/high/medium/low |
+| | Agent-Zuweisung | Nein | Ja |
+| | Deadlines | Ja (due-Feld) | Nein |
+| **Files** | Absorb (Datei->DB) | Ja | Nein |
+| | Materialize (DB->Datei) | Ja | Nein |
+| | Observe (beobachten) | Ja | Nein |
+| | Blob-Halde (>50MB) | Ja | Nein |
+| **Automation** | Chains | Nein | Marble-Run-Modell |
+| | Ollama | Nein | Ja (REST-Client) |
+| **Connectors** | Telegram/Discord/HA | Nein (geplant) | Ja |
+| **Architektur** | Dependencies | Zero | Zero |
+| | Event-Bus | Nein | Ja |
+| | Multi-Agent | Nein | Ja (Event-Bus + USMC) |
+
+**Kurzfassung:** Gardener = radikaler Minimalismus (1 Tabelle, Suche = alles).
+Rinnsal = mehr Struktur, dafuer Connectors und Chains out of the box.
+
+## Erweiterbarkeit
+
+Gardener ist als Kern gedacht, der durch ellmos-Module erweiterbar wird:
+
+| Modul | Funktion | Status |
+|-------|----------|--------|
+| [connectors](https://github.com/ellmos-ai/connectors) | Telegram, Discord, Webhook, etc. | Geplant |
+| [USMC](https://github.com/ellmos-ai/usmc) | Cross-Agent Shared Memory | Integrierbar |
+| [clutch](https://github.com/ellmos-ai/clutch) | Smart Model-Routing | Integrierbar |
+| [swarm-ai](https://github.com/ellmos-ai/swarm-ai) | Parallele LLM-Patterns | Integrierbar |
+
+Die Vision: Das LLM bedient sich selbst aus einer Bibliothek von Modulen.
+Gardener stellt die Suche, das Gedaechtnis und die Ausfuehrungsumgebung --
+alles andere kommt als Plugin dazu wenn es gebraucht wird.
+
 ## Konzept
 
 Ausfuehrliche Designdokumentation: [KONZEPT.md](KONZEPT.md)
