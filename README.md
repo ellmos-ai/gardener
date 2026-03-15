@@ -1,4 +1,8 @@
-# Gardener -- LLM-natives Betriebssystem
+<p align="center">
+  <img src="logo.jpg" alt="gardener logo" width="300">
+</p>
+
+# gardener -- Database-Based OS for LLMs
 
 > Status: Prototyp | Autor: Lukas Geiger + Claude | 2026-03-12
 
