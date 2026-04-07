@@ -1,15 +1,17 @@
-# Gardener -- Konzeptidee (2026-03-12)
+# Gardener — Konzeptidee (2026-03-12)
+
+**🇬🇧 [English Version](DESIGN.md)**
 
 > Status: Ideenphase
 > Autor: Lukas Geiger + Claude
 
 ## Kernidee
 
-Ein LLM-natives Betriebssystem das auf drei Saeulen basiert:
+Ein LLM-natives Betriebssystem das auf drei Säulen basiert:
 
-1. **Text** -- Wissen, Anleitungen, Referenzen
-2. **Kontext** -- Tasks, Memory, Chat, State
-3. **Ausfuehrung** -- Code ausfuehren, direkt oder als Blaupause
+1. **Text** — Wissen, Anleitungen, Referenzen
+2. **Kontext** — Tasks, Memory, Chat, State
+3. **Ausführung** — Code ausführen, direkt oder als Blaupause
 
 Der einzige Zugang zu allem: **Suche**.
 
@@ -21,9 +23,9 @@ Der einzige Zugang zu allem: **Suche**.
 │                                              │
 │  ┌─────────┐  ┌─────────┐  ┌─────────────┐  │
 │  │  TEXT    │  │ KONTEXT │  │  WERKZEUGE  │  │
-│  │ Wissen  │  │ Tasks   │  │ Code-Bloecke │  │
+│  │ Wissen  │  │ Tasks   │  │ Code-Blöcke │  │
 │  │ Regeln  │  │ Memory  │  │ Blaupausen  │  │
-│  │ Doku    │  │ Chat    │  │ Ausfuehrbar │  │
+│  │ Doku    │  │ Chat    │  │ Ausführbar │  │
 │  │ Wiki    │  │ State   │  │ oder Vorlage│  │
 │  └────┬────┘  └────┬────┘  └──────┬──────┘  │
 │       └────────────┼───────────────┘         │
@@ -34,7 +36,7 @@ Der einzige Zugang zu allem: **Suche**.
 │            ┌───────▼───────┐                 │
 │            │   ERGEBNIS    │                 │
 │            │  Text: lesen  │                 │
-│            │  Code: ausfuehren              │
+│            │  Code: ausführen              │
 │            │  Beides: orientieren            │
 │            └───────────────┘                 │
 └─────────────────────────────────────────────┘
@@ -46,10 +48,10 @@ Der einzige Zugang zu allem: **Suche**.
 
 ```
 gardener.db          # System: Wissen, Tools, Blaupausen (versionierbar)
-user.db             # User: Memory, Tasks, Belege, persoenliche Daten
+user.db             # User: Memory, Tasks, Belege, persönliche Daten
 ```
 
-Fuer das LLM unsichtbar -- SQLite ATTACH macht beide transparent durchsuchbar:
+Für das LLM unsichtbar — SQLite ATTACH macht beide transparent durchsuchbar:
 
 ```sql
 ATTACH 'user.db' AS user;
@@ -59,9 +61,9 @@ ATTACH 'user.db' AS user;
 | Vorteil | Warum |
 |---------|-------|
 | **Update** | gardener.db ersetzen, user.db bleibt |
-| **Reset** | user.db loeschen = frischer Start |
+| **Reset** | user.db löschen = frischer Start |
 | **Privacy** | user.db geht nie nach Git |
-| **Backup** | Nur user.db sichern (klein, persoenlich) |
+| **Backup** | Nur user.db sichern (klein, persönlich) |
 | **Multi-User** | Jeder kriegt eigene user.db, selbes System |
 
 ```python
@@ -76,20 +78,20 @@ run("beleg-scanner")    # kommt aus gardener.db
 
 ### Kernprinzip: Die Datenbank ist die Wahrheit
 
-Dateien im Ordner sind keine eigenstaendige Speicherung -- sie sind eine
+Dateien im Ordner sind keine eigenständige Speicherung — sie sind eine
 **Ein-/Ausgangsschnittstelle** zur menschlichen Welt. Die DB ist der
 lebende Kern, der Ordner ist ein Spiegel.
 
 ### Eingang: .absorber/ → Datenbank (physische Schnittstelle)
 
-Der Mensch legt Dateien in den `.absorber/`-Ordner. Beim naechsten
+Der Mensch legt Dateien in den `.absorber/`-Ordner. Beim nächsten
 `sync()` werden sie absorbiert und aus dem Ordner entfernt.
 
 ```
 User legt Datei in den Absorber:
   ~/gardener/.absorber/rechnung.pdf
 
-Naechster Sync (gardener sync):
+Nächster Sync (gardener sync):
   → Datei wird gelesen (Text extrahiert)
   → Eintrag in user.db: type='document', name='rechnung.pdf'
   → Datei wird aus .absorber/ ENTFERNT (sie lebt jetzt im Haus)
@@ -134,64 +136,64 @@ materialize("steuerbericht-2025")
 | **observe_only** | Nichts absorbieren, alles nur beobachten |
 
 `selective` ist der empfohlene Modus. `always_absorb` macht das System
-zu einem reinen Speicher -- alles was reinkommt, verschwindet in die DB.
+zu einem reinen Speicher — alles was reinkommt, verschwindet in die DB.
 
 ### Philosophie: Beide Welten sind real
 
-Dateien und Datenbank sind nicht Herr und Spiegel -- sie sind
-**zwei gleichberechtigte Realitaeten** die synchron gehalten werden.
+Dateien und Datenbank sind nicht Herr und Spiegel — sie sind
+**zwei gleichberechtigte Realitäten** die synchron gehalten werden.
 
-**Fuer den Menschen:**
-Dateien sind das menschliche Pendant zu Buechern und Texten. So haben
+**Für den Menschen:**
+Dateien sind das menschliche Pendant zu Büchern und Texten. So haben
 wir seit Jahrhunderten Wissen strukturiert. Eine Datei ist etwas zum
-Anfassen -- frueher echtes Papier, heute ein Icon im Explorer. What
+Anfassen — früher echtes Papier, heute ein Icon im Explorer. What
 you see is what you get. Wenn ich eine Datei verschiebe, brauche ich
-sie gerade woanders. Wenn ich sie loesche, will ich dass sie weg ist
-und das auch SEHEN koennen.
+sie gerade woanders. Wenn ich sie lösche, will ich dass sie weg ist
+und das auch SEHEN können.
 
-**Fuer das LLM:**
-Die Datenbank ist das Zuhause. Das Kontextfenster ist das Format --
-hier muss Text landen, egal welches Format er draussen hat. Das LLM
+**Für das LLM:**
+Die Datenbank ist das Zuhause. Das Kontextfenster ist das Format —
+hier muss Text landen, egal welches Format er draußen hat. Das LLM
 braucht keine Ordnerstruktur, keine Dateiendungen, keine Pfade. Es
-braucht: durchsuchbaren Text, ausfuehrbaren Code, und Kontext.
+braucht: durchsuchbaren Text, ausführbaren Code, und Kontext.
 
 **Der Unterschied im Zweck:**
 
 | Wer | Sicht auf die DB |
 |-----|-----------------|
-| LLM | Mein Haus. Hier lebe und arbeite ich. Alles was draussen passiert, sehe ich durch mein Fenster (Sync IN). |
+| LLM | Mein Haus. Hier lebe und arbeite ich. Alles was draußen passiert, sehe ich durch mein Fenster (Sync IN). |
 | User | Mein Speicher. Hier bewahre ich Dinge auf, die sicher sein sollen. Und ich kann reinschauen (DB-Viewer). |
 
-Wenn das LLM etwas fuer den Menschen baut, muss es **materialisiert**
-werden -- als Datei, als etwas Greifbares. Aber nicht alles was das
+Wenn das LLM etwas für den Menschen baut, muss es **materialisiert**
+werden — als Datei, als etwas Greifbares. Aber nicht alles was das
 LLM intern denkt und speichert muss eine Datei werden.
 
 ### Persistenz-Ebenen
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  EBENE 1: Ordner (menschliche Realitaet)        │
+│  EBENE 1: Ordner (menschliche Realität)        │
 │  Dateien die der User sieht und anfasst.         │
-│  Verschieben, Umbenennen, Loeschen = real.        │
+│  Verschieben, Umbenennen, Löschen = real.        │
 │  → Sync IN: automatisch in DB                    │
 │  → Sync OUT: nur wenn LLM materialisiert         │
 ├─────────────────────────────────────────────────┤
 │  EBENE 2: user.db (gemeinsamer Speicher)        │
-│  Fuer User: Aufbewahrung, Archiv, Sicherheit.    │
-│  Fuer LLM: Kontext, Memory, Arbeitsgedaechtnis.  │
+│  Für User: Aufbewahrung, Archiv, Sicherheit.    │
+│  Für LLM: Kontext, Memory, Arbeitsgedächtnis.  │
 │  Zugang: DB-Viewer (Mensch) oder find() (LLM).   │
 │  → Backup: nur diese Datei sichern               │
 ├─────────────────────────────────────────────────┤
 │  EBENE 3: gardener.db (System-Kern)              │
 │  Wissen, Tools, Blaupausen.                      │
-│  Ueberlebt alles. Respawnt geloeschte Dateien.    │
-│  → Versioniert, update-faehig                     │
+│  Überlebt alles. Respawnt gelöschte Dateien.    │
+│  → Versioniert, update-fähig                     │
 └─────────────────────────────────────────────────┘
 ```
 
 ### Transporter-Buffer (Absorb / Materialize)
 
-Inspiriert von Star Treks Musterpuffer: Dateien koennen zwischen der
+Inspiriert von Star Treks Musterpüffer: Dateien können zwischen der
 physischen Welt (Ordner) und der Datenbank hin- und hergebeamt werden.
 Es gibt nur **zwei Operationen**: Absorb (rein) und Materialize (raus).
 
@@ -203,18 +205,18 @@ ABSORBIEREN (Datei → DB)
 
 MATERIALISIEREN (DB → Datei)
   LLM:        materialize("steuerbericht-2025")
-  →           Datei erscheint in .output/, bereit zum Oeffnen/Mailen
+  →           Datei erscheint in .output/, bereit zum Öffnen/Mailen
 ```
 
 **Kein separates "Dematerialize".** Absorb IST Dematerialisierung.
 Der Mensch legt die Datei in `.absorber/`, sie verschwindet in die DB.
-Will er sie zurueck: `materialize()` legt sie in `.output/`.
+Will er sie zurück: `materialize()` legt sie in `.output/`.
 
-**Regeln fuer die Aufbewahrung:**
+**Regeln für die Aufbewahrung:**
 
-- **Absorbierte Dateien** bleiben in user.db bis explizit geloescht
-- **Binaerdateien** (PDF, Bilder): als BLOB + extrahierter Text
-- **Grosse Dateien** (>50MB): nur Index in DB, Datei auf Halde (blobs/)
+- **Absorbierte Dateien** bleiben in user.db bis explizit gelöscht
+- **Binärdateien** (PDF, Bilder): als BLOB + extrahierter Text
+- **Große Dateien** (>50MB): nur Index in DB, Datei auf Halde (blobs/)
 - **Schwellenwerte** konfigurierbar (Default: 1MB inline, 50MB Halde)
 
 ### Sync-Mechanismus
@@ -233,23 +235,23 @@ Will er sie zurueck: `materialize()` legt sie in `.output/`.
 
 Sync-Punkte:
   - Manuell: gardener sync (empfohlen)
-  - Filesystem-Watcher (watchdog) fuer Echtzeit (spaeter)
-  - Periodischer Scan (alle X Sekunden, spaeter)
+  - Filesystem-Watcher (watchdog) für Echtzeit (später)
+  - Periodischer Scan (alle X Sekunden, später)
 ```
 
-### Selbstheilung (Respawn) -- spaeter
+### Selbstheilung (Respawn) — später
 
 Wichtige Systemdokumente (knowledge, tools) sind in gardener.db gespeichert.
-Wenn sie im Ordner geloescht werden, koennen sie jederzeit neu materialisiert
-werden. Eine automatische Respawn-Logik ist fuer spaeter geplant.
+Wenn sie im Ordner gelöscht werden, können sie jederzeit neu materialisiert
+werden. Eine automatische Respawn-Logik ist für später geplant.
 
-Aktuell reicht: `materialize("beleg-scanner")` stellt eine geloeschte
+Aktuell reicht: `materialize("beleg-scanner")` stellt eine gelöschte
 Datei wieder her. Die DB ist die Wahrheit, nicht der Ordner.
 
-### DB-Viewer -- kommt aus BACH
+### DB-Viewer — kommt aus BACH
 
 Der DB-Viewer wird aus BACH portiert (BACHs GUI-Server hat bereits
-Search, Browse, Edit fuer SQLite-Datenbanken). Gardener braucht nur
+Search, Browse, Edit für SQLite-Datenbanken). Gardener braucht nur
 eine angepasste Ansicht die `everything` + `everything_fts` nutzt.
 
 ---
@@ -264,20 +266,20 @@ CREATE TABLE everything (
     type TEXT,        -- 'knowledge', 'tool', 'task', 'memory', 'config',
                       --  'session', 'document', 'export'
     name TEXT,        -- Eindeutiger Name
-    content TEXT,     -- Markdown mit optionalen Code-Bloecken
-    tags TEXT,        -- Komma-separiert, fuer Filterung
-    meta TEXT,        -- JSON fuer strukturierte Daten
-    pinned INTEGER DEFAULT 0,  -- 1 = fest gespeichert, ueberlebt Sync
+    content TEXT,     -- Markdown mit optionalen Code-Blöcken
+    tags TEXT,        -- Komma-separiert, für Filterung
+    meta TEXT,        -- JSON für strukturierte Daten
+    pinned INTEGER DEFAULT 0,  -- 1 = fest gespeichert, überlebt Sync
     updated TEXT      -- Timestamp
 );
 
 CREATE VIRTUAL TABLE everything_fts USING fts5(name, content, tags);
 ```
 
-### Optionale Fachtabellen (nur wenn Struktur noetig)
+### Optionale Fachtabellen (nur wenn Struktur nötig)
 
 ```sql
--- Beispiel: Wenn 50 Steuerbelege verglichen werden muessen
+-- Beispiel: Wenn 50 Steuerbelege verglichen werden müssen
 CREATE TABLE steuer_belege (
     id INTEGER PRIMARY KEY,
     betrag REAL,
@@ -289,7 +291,7 @@ CREATE TABLE steuer_belege (
 ```
 
 Fachtabellen werden nur angelegt wenn die meta-JSON-Felder nicht mehr
-reichen. Sie referenzieren immer zurueck auf everything (Foreign Key).
+reichen. Sie referenzieren immer zurück auf everything (Foreign Key).
 
 ### Meta-Tabelle (Regal beschreibt sich selbst)
 
@@ -304,20 +306,20 @@ CREATE TABLE shelves (
 
 ---
 
-## API -- Vier Funktionen
+## API — Vier Funktionen
 
 ```python
 find("steuer")                          # Suchen (beides: gardener.db + user.db)
 get("steuererklaerung")                 # Einen Eintrag lesen
 put("name", content="...", type="tool") # Schreiben (auto: user.db oder gardener.db)
-run("beleg-scanner", input={...})       # Code-Block ausfuehren
+run("beleg-scanner", input={...})       # Code-Block ausführen
 ```
 
 ---
 
 ## Tool-Format
 
-Ein Tool ist gleichzeitig Dokumentation, Blaupause und ausfuehrbar:
+Ein Tool ist gleichzeitig Dokumentation, Blaupause und ausführbar:
 
 ```markdown
 ---
@@ -367,96 +369,96 @@ LLM:
 | Dateien = Wahrheit, DB = Abbild | Beide Welten sind real, DB = Haus |
 | CLI + API + GUI | Suche + Viewer + Sync |
 | Ordnerstruktur ist Architektur | Ordner = Garten, DB = Haus |
-| Dateien bleiben immer Dateien | Dateien koennen dematerialisiert werden |
+| Dateien bleiben immer Dateien | Dateien können dematerialisiert werden |
 
 ---
 
 ## Metaphern
 
-### Buecherregal
+### Bücherregal
 
-- **BACH:** Abgeschlossenes Regal mit Schluessel. Katalog (DB) beschreibt
-  Buecher (Dateien). Wer ein Buch will muss den Schluessel kennen.
+- **BACH:** Abgeschlossenes Regal mit Schlüssel. Katalog (DB) beschreibt
+  Bücher (Dateien). Wer ein Buch will muss den Schlüssel kennen.
 
-- **Gardener:** Zwei Raeume, ein Regal dazwischen. Der Mensch sieht Buecher
+- **Gardener:** Zwei Räume, ein Regal dazwischen. Der Mensch sieht Bücher
   (Dateien) die er anfassen kann. Das LLM sieht Text (DB) den es durchsucht.
   Das Regal synchronisiert beide Seiten.
 
 ### Star Trek Transporter
 
-Dateien existieren in zwei Zustaenden:
+Dateien existieren in zwei Zuständen:
 - **Materialisiert:** Als Datei im Ordner. Greifbar, sichtbar, bearbeitbar.
-- **Dematerialisiert:** Als Muster in der DB. Unsichtbar, aber vollstaendig.
+- **Dematerialisiert:** Als Muster in der DB. Unsichtbar, aber vollständig.
 
-Der User kann jederzeit zwischen beiden Zustaenden wechseln.
+Der User kann jederzeit zwischen beiden Zuständen wechseln.
 Das LLM arbeitet bevorzugt mit dem Muster (DB), materialisiert nur wenn
 der Mensch etwas Greifbares braucht.
 
 ### Das Sketchboard-Modell
 
-Das LLM ist nicht IM Haus. **Das LLM IST das Haus** -- sein
+Das LLM ist nicht IM Haus. **Das LLM IST das Haus** — sein
 Kontextfenster ist der lebendige Raum wo Denken passiert, wie ein
 Sketchboard das beschrieben und wieder gewischt wird.
 
-Die DB ist das **Fotoalbum** -- Schnappschuesse und Notizen die
-ueberleben wenn das Sketchboard geloescht wird. `put()` macht ein
+Die DB ist das **Fotoalbum** — Schnappschüsse und Notizen die
+überleben wenn das Sketchboard gelöscht wird. `put()` macht ein
 Foto vom aktuellen Gedanken. `recall()` schaut alte Fotos an.
 
 ```
-ICH (Kontextfenster)       GEDAECHTNIS (DB)          DRAUSSEN (Welt)
+ICH (Kontextfenster)       GEDÄCHTNIS (DB)          DRAUSSEN (Welt)
 Das Sketchboard            Das Fotoalbum             Dateien, Ordner
 Lebendiges Denken          Was ich mir merke          Netzwerk, APIs
 Hier entsteht alles        put() = Foto machen       Hardware, Prozesse
 Wird nach Session          recall() = erinnern
-  geloescht                find() = blaettern
+  gelöscht                find() = blättern
 
                 HAUT (Tools dazwischen)
-                observe() = Augen (schauen was draussen liegt)
+                observe() = Augen (schauen was draußen liegt)
                 text-stats = Tastsinn (abtasten bevor greifen)
                 absorb() = Mund (fremden Text einverleiben)
-                materialize() = Stimme (Ergebnis nach draussen)
-                shell, http = Haende (draussen arbeiten)
+                materialize() = Stimme (Ergebnis nach draußen)
+                shell, http = Hände (draußen arbeiten)
 ```
 
-**Text draussen ist nicht dasselbe wie Text in der DB.** In der DB
-ist er integriert, durchsuchbar, gewichtet -- Teil meiner Erinnerung.
-Draussen ist er roh und fremd. Die Haut-Tools helfen zu entscheiden
-was ins Gedaechtnis soll und was draussen bleiben kann.
+**Text draußen ist nicht dasselbe wie Text in der DB.** In der DB
+ist er integriert, durchsuchbar, gewichtet — Teil meiner Erinnerung.
+Draußen ist er roh und fremd. Die Haut-Tools helfen zu entscheiden
+was ins Gedächtnis soll und was draußen bleiben kann.
 
 ---
 
-## Geloeste Design-Entscheidungen
+## Gelöste Design-Entscheidungen
 
 ### 1. Die DB als Werkstatt (nicht nur Speicher)
 
-Das LLM ist nicht nur Text -- es ist auch **Textgenerierung**. Wenn es
-Code schreibt, muss es nicht direkt in eine Datei schreiben (= draussen
+Das LLM ist nicht nur Text — es ist auch **Textgenerierung**. Wenn es
+Code schreibt, muss es nicht direkt in eine Datei schreiben (= draußen
 arbeiten). Es schreibt zuerst im Haus:
 
 ```python
 # Im Haus entwerfen
 put("api-server", type="tool", content="```python\ndef execute(input):...")
 
-# Im Haus ueberarbeiten (so oft wie noetig)
+# Im Haus überarbeiten (so oft wie nötig)
 put("api-server", content="[verbesserte Version]")
 
 # Wenn der Code laufen soll
 run("api-server", input={...})
-  → Code wird in temporaeren Workspace materialisiert
-  → Ausfuehrung als normales Python-Script (kein exec())
-  → Ergebnis zurueck in DB
-  → Workspace bleibt stehen oder wird aufgeraeumt
+  → Code wird in temporären Workspace materialisiert
+  → Ausführung als normales Python-Script (kein exec())
+  → Ergebnis zurück in DB
+  → Workspace bleibt stehen oder wird aufgeräumt
 
 # Wenn der Mensch die Datei braucht
 materialize("api-server")  → .output/api-server.py
 ```
 
-Das gilt fuer ALLES was das LLM produziert -- Code, Berichte,
+Das gilt für ALLES was das LLM produziert — Code, Berichte,
 Konfigurationen. Alles entsteht im Haus, wird dort verfeinert,
-und geht erst nach draussen wenn es gebraucht wird.
+und geht erst nach draußen wenn es gebraucht wird.
 
-**Vorteil:** Entwuerfe sind durchsuchbar (`find("api")`), ueberarbeitbar
-(`put()` ueberschreibt), und bleiben im Kontext bis sie fertig sind.
+**Vorteil:** Entwürfe sind durchsuchbar (`find("api")`), überarbeitbar
+(`put()` überschreibt), und bleiben im Kontext bis sie fertig sind.
 
 ### 2. Sync-Konflikte
 
@@ -465,8 +467,8 @@ zwischen LLM und Dateien:
 
 **a) Dateien vor dem Haus (nur beobachten):**
 Der User legt eine Word-Datei in den Ordner. Das LLM sieht sie durch
-sein Fenster -- es bekommt nur den extrahierten Text, nicht die Datei
-selbst. Kein Konflikt moeglich: die Datei gehoert dem User, das LLM
+sein Fenster — es bekommt nur den extrahierten Text, nicht die Datei
+selbst. Kein Konflikt möglich: die Datei gehört dem User, das LLM
 liest nur mit.
 
 ```
@@ -474,16 +476,16 @@ liest nur mit.
   → DB bekommt: name='vertrag.docx', content=[extrahierter Text],
     meta={"path": "dokumente/vertrag.docx", "observed": true}
   → Die .docx wird NICHT in die DB kopiert
-  → User aendert die Datei → naechster Sync aktualisiert den Text
+  → User ändert die Datei → nächster Sync aktualisiert den Text
 ```
 
 **b) Dateien ins Haus holen (absorbieren):**
 User sagt "speicher das" oder LLM braucht die Datei zum Bearbeiten.
-Die Datei wird absorbiert -- sie lebt jetzt IN der DB.
+Die Datei wird absorbiert — sie lebt jetzt IN der DB.
 
 ```
 User: "Nimm den Vertrag mal rein"
-  → DB bekommt: content=[vollstaendiger Inhalt], BLOB=[Originaldatei],
+  → DB bekommt: content=[vollständiger Inhalt], BLOB=[Originaldatei],
     meta={"absorbed": true}
   → Datei im Ordner kann jetzt weg (oder bleibt als Kopie)
   → Bearbeitung passiert in der DB oder im Workspace
@@ -495,9 +497,9 @@ aktualisiert automatisch was das LLM durch sein Fenster sieht.
 
 ```
 LLM editiert ~/gardener/dokumente/bericht.md
-  → Datei aendert sich
+  → Datei ändert sich
   → Sync aktualisiert den DB-Eintrag
-  → Kein Konflikt: die Datei ist die Wahrheit fuer beobachtete Dateien
+  → Kein Konflikt: die Datei ist die Wahrheit für beobachtete Dateien
 ```
 
 **Zusammenfassung:**
@@ -513,7 +515,7 @@ Die Datenbank lebt **lokal** (App-Ordner), nicht im Cloud-Sync-Ordner.
 C:\Users\User\AppData\Local\Gardener\     ← DB lebt hier (lokal)
   gardener.db
   user.db
-  blobs/                                  ← Grosse Dateien (Halde)
+  blobs/                                  ← Große Dateien (Halde)
 
 ~/gardener/                                ← Ordner lebt hier (OneDrive ok)
   .absorber/                              ← Briefkasten (Dateien → DB)
@@ -521,17 +523,17 @@ C:\Users\User\AppData\Local\Gardener\     ← DB lebt hier (lokal)
   dokumente/                              ← Beobachtete Dateien
 ```
 
-Der Gardener-Ordner (den der User sieht) kann in OneDrive liegen --
+Der Gardener-Ordner (den der User sieht) kann in OneDrive liegen —
 kein Problem, es sind nur normale Dateien. Die DB liegt lokal, kein
-Cloud-Sync-Konflikt moeglich.
+Cloud-Sync-Konflikt möglich.
 
-Falls Multi-Device gewuenscht: Eine kleine Umleitungs-Datei im
+Falls Multi-Device gewünscht: Eine kleine Umleitungs-Datei im
 Ordner (`gardener.pointer`) zeigt auf die lokale DB. Oder: DB-Export/
 Import als Sync-Mechanismus (nicht Live-Sync der DB selbst).
 
-### 4. Grosse Dateien (BLOB-Problem)
+### 4. Große Dateien (BLOB-Problem)
 
-Grosse Dateien werden nicht in die DB gestopft. Stattdessen: **Halde**.
+Große Dateien werden nicht in die DB gestopft. Stattdessen: **Halde**.
 
 ```
 User: "Speicher dieses 500MB-Video"
@@ -539,7 +541,7 @@ User: "Speicher dieses 500MB-Video"
 DB bekommt:
   name='urlaubsvideo.mp4'
   type='archive'
-  content=[keine -- zu gross fuer Textextraktion]
+  content=[keine — zu groß für Textextraktion]
   meta={"size": 524288000, "mimetype": "video/mp4",
         "blob_path": "blobs/a7f3b2c1.mp4",
         "original_name": "urlaubsvideo.mp4"}
@@ -547,9 +549,9 @@ DB bekommt:
 Datei landet auf der Halde:
   AppData/Local/Gardener/blobs/a7f3b2c1.mp4
 
-Fuer den User sieht es so aus als waere die Datei in die DB
+Für den User sieht es so aus als wäre die Datei in die DB
 gezogen worden. Sie ist weg aus dem Ordner. Will er sie wieder:
-  → Rematerialisierung holt sie von der Halde zurueck
+  → Rematerialisierung holt sie von der Halde zurück
 ```
 
 **Schwellenwerte:**
@@ -560,19 +562,19 @@ gezogen worden. Sie ist weg aus dem Ordner. Will er sie wieder:
 
 ---
 
-## Memory: Kein separates Gedaechtnis-System (Design-Entscheidung)
+## Memory: Kein separates Gedächtnis-System (Design-Entscheidung)
 
 ### Was BACH hat (und warum Gardener es anders macht)
 
-BACH hat 5 kognitive Gedaechtnis-Typen in **separaten Tabellen**:
-- memory_working (Kurzzeitgedaechtnis)
-- memory_sessions (Episodisches Gedaechtnis)
-- memory_facts (Semantisches Gedaechtnis)
-- memory_lessons (Prozedurales Gedaechtnis)
-- context_triggers (Assoziatives Gedaechtnis)
+BACH hat 5 kognitive Gedächtnis-Typen in **separaten Tabellen**:
+- memory_working (Kurzzeitgedächtnis)
+- memory_sessions (Episodisches Gedächtnis)
+- memory_facts (Semantisches Gedächtnis)
+- memory_lessons (Prozedurales Gedächtnis)
+- context_triggers (Assoziatives Gedächtnis)
 
 Plus: Konsolidierungs-Pipeline mit 6 Stufen, Daemon-Jobs, Trigger-Generierung,
-350+ Tracking-Eintraege, Reklassifizierung, etc.
+350+ Tracking-Einträge, Reklassifizierung, etc.
 
 **Gardener macht das alles mit der einen `everything`-Tabelle.**
 
@@ -586,9 +588,9 @@ Plus: Konsolidierungs-Pipeline mit 6 Stufen, Daemon-Jobs, Trigger-Generierung,
 | memory_lessons | `type='lesson'` | Gleich, aber in everything |
 | context_triggers | **die Suche selbst** | FTS5 IST die Assoziation |
 
-Der Trick: **Die Suche IST das assoziative Gedaechtnis.** Wenn ich
-`find("steuer")` mache, finde ich Wissen, Tasks, Memos, Lessons und
-Sessions gleichzeitig. Keine Trigger-Tabelle noetig.
+Der Trick: **Die Suche IST das assoziative Gedächtnis.** Wenn ich
+`find("steuer")` mache, finde ich Wissen, Tools, Tasks, Memos, Lessons und
+Sessions gleichzeitig. Keine Trigger-Tabelle nötig.
 
 ### Gewichtung, Decay und Boost
 
@@ -607,21 +609,21 @@ Statt separater `memory_consolidation`-Tabelle nutzt Gardener das
 
 - **Decay**: Bei jeder Konsolidierung: `weight *= decay_rate`
 - **Boost**: Bei jedem Abruf via `recall()`: `weight += 0.1`
-- **Forget**: Eintraege mit `weight < 0.05` werden geloescht
+- **Forget**: Einträge mit `weight < 0.05` werden gelöscht
 
 ### Memory-API
 
 ```python
 af = Gardener()
 
-# Arbeitsgedaechtnis (kurzlebig, verfaellt schnell)
+# Arbeitsgedächtnis (kurzlebig, verfällt schnell)
 af.memo("Wichtige Beobachtung zur Steuer")
 
-# Lesson (langlebig, verfaellt langsam)
+# Lesson (langlebig, verfällt langsam)
 af.lesson("SQLite-WAL", "Immer WAL-Mode aktivieren", severity="high")
 
 # Session-Bericht (episodisch)
-af.session_end("THEMA: Memory implementiert. NAECHSTE: Testen.")
+af.session_end("THEMA: Memory implementiert. NÄCHSTE: Testen.")
 
 # Erinnern (sucht + boosted Gewicht)
 af.recall("steuer")  # Findet Memos + Lessons + Sessions
@@ -637,8 +639,8 @@ Gardener hat **eine Methode**: `consolidate()`.
 
 ```
 consolidate() macht:
-  1. Decay: Gewicht aller Memory-Eintraege reduzieren
-  2. Forget: Eintraege unter 0.05 loeschen
+  1. Decay: Gewicht aller Memory-Einträge reduzieren
+  2. Forget: Einträge unter 0.05 löschen
   3. Fertig.
 ```
 
@@ -646,24 +648,24 @@ Keine Pipeline, kein Daemon, keine Reklassifizierung. Wenn das LLM
 eine Notiz oft abruft (`recall()`), steigt ihr Gewicht (Boost).
 Wenn nicht, sinkt es (Decay). Wie im echten Gehirn.
 
-### Was bewusst NICHT uebernommen wird
+### Was bewusst NICHT übernommen wird
 
 | BACH Feature | Warum nicht |
 |-------------|-------------|
 | context_triggers (900+) | FTS5-Suche IST die Assoziation |
-| Trigger-Generierung | Nicht noetig ohne Trigger-Tabelle |
-| Reclassify | Typ aendern = einfach `put()` mit neuem type |
-| Confidence-System | Gewicht reicht, Konfidenz ist Ueberengineering |
+| Trigger-Generierung | Nicht nötig ohne Trigger-Tabelle |
+| Reclassify | Typ ändern = einfach `put()` mit neuem type |
+| Confidence-System | Gewicht reicht, Konfidenz ist Überengineering |
 | Daemon-Jobs | `consolidate()` bei Session-Ende reichen |
 | 6-Stufen-Pipeline | Decay + Forget reicht |
 
 ### CLI
 
 ```bash
-gardener memo <text>            Notiz ins Arbeitsgedaechtnis
+gardener memo <text>            Notiz ins Arbeitsgedächtnis
 gardener lesson <titel> [text]  Lektion speichern
 gardener recall <query>         Erinnern (mit Boost)
-gardener consolidate            Gedaechtnis konsolidieren
+gardener consolidate            Gedächtnis konsolidieren
 gardener session-end <text>     Session-Bericht speichern
 ```
 
@@ -671,30 +673,30 @@ gardener session-end <text>     Session-Bericht speichern
 
 | Typ | decay_rate | Bedeutung |
 |-----|-----------|-----------|
-| memory | 0.95 | Verfaellt schnell (5% pro Konsolidierung) |
-| session | 0.97 | Verfaellt mittel (3% pro Konsolidierung) |
-| lesson | 0.99 | Verfaellt kaum (1% pro Konsolidierung) |
-| knowledge | - | Verfaellt nie (kein Decay) |
-| tool | - | Verfaellt nie (kein Decay) |
+| memory | 0.95 | Verfällt schnell (5% pro Konsolidierung) |
+| session | 0.97 | Verfällt mittel (3% pro Konsolidierung) |
+| lesson | 0.99 | Verfällt kaum (1% pro Konsolidierung) |
+| knowledge | - | Verfällt nie (kein Decay) |
+| tool | - | Verfällt nie (kein Decay) |
 
 ---
 
 ## Tasks: Kein separates System (Design-Entscheidung)
 
-Tasks sind **keine eigene Komponente** -- sie sind Eintraege vom Typ `task` in
+Tasks sind **keine eigene Komponente** — sie sind Einträge vom Typ `task` in
 der `everything`-Tabelle. Das ist Absicht und ein Kernprinzip von Gardener.
 
 ### Warum kein Task-System?
 
-Ein separates Task-System waere ein Widerspruch zur Grundidee. Gardener hat
+Ein separates Task-System wäre ein Widerspruch zur Grundidee. Gardener hat
 **eine** Suche und **eine** Tabelle. Wenn ich nach "steuer" suche, finde ich:
-- Das Wissen zur Steuererklaerung (knowledge)
+- Das Wissen zur Steuererklärung (knowledge)
 - Den Beleg-Scanner (tool)
-- Die offene Aufgabe "Steuererklaerung einreichen" (task)
+- Die offene Aufgabe "Steuererklärung einreichen" (task)
 - Den gespeicherten letzten Steuerbescheid (document)
 
-Alles in einem Ergebnis. Ein separates Task-System wuerde diesen Vorteil
-zerstoeren.
+Alles in einem Ergebnis. Ein separates Task-System würde diesen Vorteil
+zerstören.
 
 ### Task-API (Komfort-Methoden)
 
@@ -702,18 +704,18 @@ zerstoeren.
 af = Gardener()
 
 # Task erstellen
-af.task("steuer-2025", content="Steuererklaerung einreichen",
+af.task("steuer-2025", content="Steuererklärung einreichen",
         priority="high", due="2026-05-31")
 
 # Tasks auflisten
 af.tasks()                    # alle
 af.tasks(status="open")       # nur offene
 
-# Status aendern
+# Status ändern
 af.task_status("steuer-2025", "doing")
 af.task_done("steuer-2025")
 
-# Aber auch direkt ueber put() moeglich:
+# Aber auch direkt über put() möglich:
 af.put("steuer-2025", type="task", content="...",
        meta={"status": "open", "priority": "high"})
 ```
@@ -736,12 +738,12 @@ gardener done <name>                   # Task erledigt
 | blocked | Blockiert |
 | waiting | Wartet auf etwas/jemanden |
 
-### Materialisierung fuer Menschen
+### Materialisierung für Menschen
 
 Wer die Tasks als Datei sehen will, materialisiert sie:
 
 ```python
-# Task-Uebersicht als Datei
+# Task-Übersicht als Datei
 tasks = af.tasks(status="open")
 content = "# Offene Tasks\n\n"
 for t in tasks:
@@ -756,34 +758,34 @@ af.materialize("task-uebersicht")
 # → .output/tasks.md erscheint
 ```
 
-Die Wahrheit bleibt in der DB. Die Datei ist nur ein Snapshot fuer menschliche Augen.
+Die Wahrheit bleibt in der DB. Die Datei ist nur ein Snapshot für menschliche Augen.
 
 ---
 
 ## Offene Fragen (2026-03-12)
 
-### Geloest
+### Gelöst
 - ~~Dateien vs. Datenbank?~~ → DB als Kern, Ordner als Schnittstelle
 - ~~Eine Tabelle oder dynamisch?~~ → Eine Kern-Tabelle + optionale Fachtabellen
 - ~~Userdaten getrennt?~~ → Ja: gardener.db + user.db, transparent via ATTACH
 - ~~Git-Nachteil?~~ → DB lebt lokal, Ordner kann in Git/Cloud
 - ~~Code-Sandbox?~~ → Workspace-Materialisierung statt exec()
 - ~~Sync-Konflikte?~~ → Drei Beziehungstypen: beobachten / absorbieren / direkt bearbeiten
-- ~~Cloud-Sync?~~ → DB lokal, Ordner in Cloud. Kein SQLite-ueber-OneDrive
-- ~~Grosse Dateien?~~ → Halde (lokaler Blob-Ordner) + Index in DB
+- ~~Cloud-Sync?~~ → DB lokal, Ordner in Cloud. Kein SQLite-über-OneDrive
+- ~~Große Dateien?~~ → Halde (lokaler Blob-Ordner) + Index in DB
 - ~~Ein-/Ausgang?~~ → .absorber/ (Briefkasten) + .output/ (Ausgabe)
 - ~~Sync-Modi?~~ → config.json: selective / always_absorb / observe_only
 - ~~Task-System?~~ → Kein separates System, Tasks = type='task' in everything
 - ~~Memory-System?~~ → Kein separates System, Memory/Lessons/Sessions = Typen in everything
-- ~~Dematerialize?~~ → Gibt es nicht separat, absorb() IST dematerialisierung
+- ~~Dematerialize?~~ → Gibt es nicht separat, absorb() IST Dematerialisierung
 - ~~Konsolidierung?~~ → Einfach: Decay + Forget, keine Pipeline
 - ~~DB-Viewer?~~ → Wird aus BACH portiert
-- ~~Fachtabellen?~~ → Fuellen sich bei Portierung von Skills/Tools aus BACH
-- ~~Selbstheilung?~~ → Spaeter; wichtige Daten sind in DB gesichert, materialize() reicht
+- ~~Fachtabellen?~~ → Füllen sich bei Portierung von Skills/Tools aus BACH
+- ~~Selbstheilung?~~ → Später; wichtige Daten sind in DB gesichert, materialize() reicht
 
 ### Offen
-- Wie funktioniert Versionierung innerhalb der DB (Aenderungshistorie)?
-- Braucht es ein Rechte-Modell (wer darf was in gardener.db aendern)?
-- Evolution von BACH (v4) oder eigenstaendiges Projekt?
+- Wie funktioniert Versionierung innerhalb der DB (Änderungshistorie)?
+- Braucht es ein Rechte-Modell (wer darf was in gardener.db ändern)?
+- Evolution von BACH (v4) oder eigenständiges Projekt?
 - Wie interagiert Gardener mit externen Tools (MCP, APIs, Shell)?
-- Wie wird der Workspace-Ordner verwaltet (aufraeumen, max. Groesse)?
+- Wie wird der Workspace-Ordner verwaltet (aufräumen, max. Größe)?

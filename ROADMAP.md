@@ -1,90 +1,92 @@
 # Gardener ROADMAP
 
-> Aktualisiert: 2026-03-12
+**🇩🇪 [Deutsche Version](ROADMAP_de.md)**
 
-## Prototyp (v0.1) -- ERLEDIGT
+> Updated: 2026-03-12
 
-- [x] Kern: find/get/put/run
-- [x] Zwei DBs: gardener.db + user.db (transparent via ATTACH)
-- [x] FTS5-Volltextsuche mit Triggern
-- [x] .absorber/ (Briefkasten) + .output/ (Ausgabe)
-- [x] config.json Sync-Modi (selective/always_absorb/observe_only)
-- [x] Blob-Halde fuer grosse Dateien (>50MB)
-- [x] Workspace-Materialisierung fuer Code-Ausfuehrung
-- [x] Drei Beziehungstypen: beobachten / absorbieren / direkt bearbeiten
+## Prototype (v0.1) — DONE
+
+- [x] Core: find/get/put/run
+- [x] Two DBs: gardener.db + user.db (transparent via ATTACH)
+- [x] FTS5 full-text search with triggers
+- [x] .absorber/ (mailbox) + .output/ (output)
+- [x] config.json sync modes (selective/always_absorb/observe_only)
+- [x] Blob heap for large files (>50MB)
+- [x] Workspace materialization for code execution
+- [x] Three relationship types: observe / absorb / direct edit
 - [x] Tasks (task/tasks/done/task_status)
 - [x] Memory (memo/lesson/session_end/recall/consolidate)
-- [x] Decay/Boost/Forget (Gewichtung im meta-Feld)
-- [x] Bridge-Tools: shell, http-fetch, backup, encoding-fix
-- [x] Haut-Tools: text-stats, datei-info, ordner-scanner
-- [x] list/delete Verwaltung
-- [x] CLI mit 19 Befehlen
-- [x] seed.py (Grundwissen + Tools)
-- [x] Dokumentation: KONZEPT.md, README.md, ERKENNTNISSE.md
+- [x] Decay/boost/forget (weighting in meta field)
+- [x] Bridge tools: shell, http-fetch, backup, encoding-fix
+- [x] Skin tools: text-stats, file-info, folder-scanner
+- [x] list/delete management
+- [x] CLI with 19 commands
+- [x] seed.py (base knowledge + tools)
+- [x] Documentation: KONZEPT.md, README.md, ERKENNTNISSE.md
 
 ---
 
-## Naechste Schritte (v0.2)
+## Next Steps (v0.2)
 
-### Lernen & Evolution
+### Learning & Evolution
 
-Tools, Skills und Wissenseintraege sollen wie Memory-Eintraege
-altern und frisch bleiben koennen:
+Tools, skills, and knowledge entries should age and stay fresh
+just like memory entries:
 
-- **Decay fuer alles:** Nicht nur memory/lesson/session, sondern auch
-  tools und knowledge bekommen Gewicht. Unbenutzte Tools verblassen,
-  oft genutzte bleiben frisch.
-- **Nutzungs-Tracking:** `run()` erhoeht das Gewicht eines Tools.
-  `get()` erhoeht das Gewicht von Knowledge. Wer gebraucht wird, lebt.
-- **Natuerliche Selektion:** Wenn ein besseres Tool fuer die gleiche
-  Aufgabe gefunden wird, ersetzt es das alte. Das alte verfaellt durch
-  Nicht-Nutzung und wird irgendwann von `consolidate()` entfernt.
-- **Erfahrung = Gewicht:** Ein Tool das 100x gelaufen ist, hat mehr
-  Gewicht als eines das 2x lief. Das spiegelt echte Erfahrung.
+- **Decay for everything:** Not just memory/lesson/session, but also
+  tools and knowledge get weight. Unused tools fade,
+  frequently used ones stay fresh.
+- **Usage tracking:** `run()` increases a tool's weight.
+  `get()` increases knowledge weight. What's needed, lives.
+- **Natural selection:** When a better tool for the same task
+  is found, it replaces the old one. The old one fades through
+  non-use and is eventually removed by `consolidate()`.
+- **Experience = weight:** A tool that ran 100 times has more
+  weight than one that ran twice. This mirrors real experience.
 
 ```
-Neues Tool:     weight=0.5 (unbewiesen)
-Nach 10x run:   weight=0.8 (bewaehrt)
-Nach 100x run:  weight=1.0 (Kern-Tool)
-Nie benutzt:    weight sinkt → consolidate() entfernt es
-Ersetzt:        Altes Tool wird nicht mehr gerufen → verfaellt
+New tool:       weight=0.5 (unproven)
+After 10x run:  weight=0.8 (proven)
+After 100x run: weight=1.0 (core tool)
+Never used:     weight drops → consolidate() removes it
+Replaced:       Old tool no longer called → fades
 ```
 
-Das ist Lernen: Nicht alles behalten, sondern das Bessere behalten
-und das Schlechtere vergessen lassen.
+This is learning: not keeping everything, but keeping the better
+and letting the worse be forgotten.
 
-### Weitere Themen v0.2
+### Further Topics v0.2
 
-- [ ] Pinning sinnvoll nutzen (pinned=1 verhindert Decay)
-- [ ] Fachtabellen bei Bedarf (shelves-Registry ist vorbereitet)
-- [ ] Mehr Bridge-Tools nach Bedarf portieren (aus BACH)
-
----
-
-## Spaeter (v0.3+)
-
-- [ ] Selbstheilung/Respawn (System-Eintraege aus gardener.db wiederherstellen)
-- [ ] DB-Viewer (aus BACH portieren)
-- [ ] MCP-Server (Gardener als MCP: find/get/put/run als Tools)
-- [ ] Versionierung (Aenderungshistorie in DB)
-- [ ] Rechte-Modell (wer darf gardener.db aendern?)
-- [ ] Workspace-Verwaltung (aufraeumen, max. Groesse)
-- [ ] Externe Anbindungen (MCP, APIs)
-- [ ] Multi-LLM (mehrere LLMs teilen sich user.db)
+- [ ] Use pinning meaningfully (pinned=1 prevents decay)
+- [ ] Specialized tables as needed (shelves registry is prepared)
+- [ ] Port more bridge tools as needed (from BACH)
 
 ---
 
-## Architektur-Entscheidungen (Logbuch)
+## Later (v0.3+)
 
-| Datum | Entscheidung | Grund |
-|-------|-------------|-------|
-| 2026-03-12 | Eine Tabelle (everything) | Alles in einer Suche |
-| 2026-03-12 | Kein separates Task-System | Tasks = type='task' in everything |
-| 2026-03-12 | Kein separates Memory-System | Memory/Lessons = Typen in everything |
-| 2026-03-12 | Kein Dematerialize | absorb() IST Dematerialisierung |
-| 2026-03-12 | FTS5 statt Trigger-Tabelle | Die Suche IST das assoziative Gedaechtnis |
-| 2026-03-12 | Koerper-Modell | Haus=Geist, Haut=Filter-Tools, Draussen=Bridge-Tools |
-| 2026-03-12 | Text-Grenze | Im Haus kein Tool, an der Haut Filter, draussen Werkzeuge |
-| 2026-03-12 | DB-Viewer aus BACH | Nicht neu bauen, portieren |
-| 2026-03-12 | Sketchboard-Modell | LLM IST das Haus (Kontext), DB ist Fotoalbum (Gedaechtnis) |
-| 2026-03-12 | Decay fuer alles (geplant) | Tools/Knowledge sollen auch altern koennen |
+- [ ] Self-healing/respawn (restore system entries from gardener.db)
+- [ ] DB viewer (port from BACH)
+- [ ] MCP server (Gardener as MCP: find/get/put/run as tools)
+- [ ] Versioning (change history in DB)
+- [ ] Permissions model (who can change what in gardener.db?)
+- [ ] Workspace management (cleanup, max size)
+- [ ] External integrations (MCP, APIs)
+- [ ] Multi-LLM (multiple LLMs share user.db)
+
+---
+
+## Architecture Decisions (Log)
+
+| Date | Decision | Reason |
+|------|----------|--------|
+| 2026-03-12 | One table (everything) | Everything in one search |
+| 2026-03-12 | No separate task system | Tasks = type='task' in everything |
+| 2026-03-12 | No separate memory system | Memory/lessons = types in everything |
+| 2026-03-12 | No dematerialize | absorb() IS dematerialization |
+| 2026-03-12 | FTS5 instead of trigger table | Search IS the associative memory |
+| 2026-03-12 | Body model | House=mind, skin=filter tools, outside=bridge tools |
+| 2026-03-12 | Text boundary | In house no tool, at skin filter, outside tools |
+| 2026-03-12 | DB viewer from BACH | Don't rebuild, port |
+| 2026-03-12 | Sketchboard model | LLM IS the house (context), DB is photo album (memory) |
+| 2026-03-12 | Decay for everything (planned) | Tools/knowledge should also age |
