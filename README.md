@@ -2,14 +2,16 @@
   <img src="logo.jpg" alt="gardener logo" width="300">
 </p>
 
-# gardener -- Database-Based OS for LLMs
+# gardener — Database-Based OS for LLMs
 
-> Status: Prototyp | Autor: Lukas Geiger + Claude | 2026-03-12
+**🇩🇪 [Deutsche Version](README_de.md)**
 
-## Was ist Gardener?
+> Status: Prototype | Author: Lukas Geiger + Claude | 2026-03-12
 
-Ein Betriebssystem das fuer LLMs gebaut ist. Alles lebt in einer durchsuchbaren
-Datenbank. Vier Funktionen reichen fuer alles.
+## What is Gardener?
+
+An operating system built for LLMs. Everything lives in a searchable
+database. Four functions are all you need.
 
 ## Quickstart
 
@@ -17,17 +19,17 @@ Datenbank. Vier Funktionen reichen fuer alles.
 from gardener import Gardener
 af = Gardener()
 
-# Suchen
-af.find("steuer")
+# Search
+af.find("taxes")
 
-# Lesen
-af.get("beleg-scanner")
+# Read
+af.get("receipt-scanner")
 
-# Schreiben
-af.put("notiz", content="Wichtig!", type="memory", tags="todo")
+# Write
+af.put("note", content="Important!", type="memory", tags="todo")
 
-# Ausfuehren
-af.run("datei-info", input={"pfad": "/pfad/zur/datei"})
+# Execute
+af.run("file-info", input={"path": "/path/to/file"})
 ```
 
 ## CLI
@@ -37,161 +39,161 @@ python gardener.py find <query>
 python gardener.py get <name>
 python gardener.py put <name> <text>
 python gardener.py run <name>
-python gardener.py absorb <datei>
+python gardener.py absorb <file>
 python gardener.py materialize <name>
 python gardener.py sync
 python gardener.py observe
 python gardener.py status
 ```
 
-## Architektur
+## Architecture
 
 ```
 Gardener/
-  gardener.py          # Kern: Gardener-Klasse + CLI
-  seed.py             # Initiales Systemwissen
-  KONZEPT.md          # Designdokumentation
-  README.md           # Diese Datei
-  workspace/          # Materialisierter Code zur Ausfuehrung
-  blobs/              # Halde fuer grosse Dateien (>50MB)
+  gardener.py          # Core: Gardener class + CLI
+  seed.py              # Initial system knowledge
+  KONZEPT.md           # Design documentation (German)
+  README.md            # This file
+  workspace/           # Materialized code for execution
+  blobs/               # Storage for large files (>50MB)
 
-Lokal (nicht in Cloud):
+Local (not in cloud):
   AppData/Local/Gardener/
-    gardener.db        # System: Wissen, Tools, Blaupausen
-    user.db           # User: Memory, Tasks, persoenliche Daten
-    blobs/            # Grosse Dateien
+    gardener.db        # System: Knowledge, tools, blueprints
+    user.db            # User: Memory, tasks, personal data
+    blobs/             # Large files
 
-User-Ordner (Cloud ok):
+User directory (cloud ok):
   ~/gardener/
-    .absorber/        # Dateien hier → automatisch in DB absorbiert
-    .output/          # Materialisierte Dateien erscheinen hier
-    dokumente/        # Beobachtete Dateien (LLM liest mit)
+    .absorber/         # Files here → automatically absorbed into DB
+    .output/           # Materialized files appear here
+    documents/         # Observed files (LLM reads along)
 ```
 
-## Datenmodell
+## Data Model
 
-Eine Tabelle fuer (fast) alles:
+One table for (almost) everything:
 
-| Typ | Beschreibung | Ziel-DB |
-|-----|-------------|---------|
-| knowledge | Wissen, Doku, Regeln | gardener.db |
-| tool | Ausfuehrbarer Code | gardener.db |
-| memory | Erinnerungen, Notizen | user.db |
-| task | Aufgaben | user.db |
-| document | Absorbierte Dateien | user.db |
-| observed | Beobachtete Dateien | user.db |
-| config | Konfiguration | user.db |
-| export | Zur Materialisierung markiert | user.db |
+| Type | Description | Target DB |
+|------|-------------|-----------|
+| knowledge | Knowledge, docs, rules | gardener.db |
+| tool | Executable code | gardener.db |
+| memory | Memories, notes | user.db |
+| task | Tasks | user.db |
+| document | Absorbed files | user.db |
+| observed | Observed files | user.db |
+| config | Configuration | user.db |
+| export | Marked for materialization | user.db |
 
-## Memory (kein separates Gedaechtnis-System!)
+## Memory (No Separate Memory System!)
 
-Statt 5 Tabellen: alles in `everything` mit Typen und Meta-Feldern.
-Die FTS5-Suche IST das assoziative Gedaechtnis.
+Instead of 5 tables: everything in `everything` with types and meta fields.
+The FTS5 search IS the associative memory.
 
 ```python
-af.memo("Kurznotiz")                    # Working Memory (verfaellt schnell)
-af.lesson("Titel", "Erkenntnis")        # Best Practice (verfaellt kaum)
-af.session_end("Zusammenfassung")       # Session-Bericht
-af.recall("steuer")                     # Erinnern (sucht + boosted Gewicht)
-af.consolidate()                        # Schlaf: Decay + Forget
+af.memo("Quick note")                    # Working memory (decays fast)
+af.lesson("Title", "Insight")            # Best practice (barely decays)
+af.session_end("Summary")               # Session report
+af.recall("taxes")                       # Remember (searches + boosts weight)
+af.consolidate()                         # Sleep: Decay + Forget
 ```
 
 ```bash
-gardener memo <text>            # Notiz
-gardener lesson <titel> [text]  # Lektion
-gardener recall <query>         # Erinnern
-gardener consolidate            # Konsolidieren
-gardener session-end <text>     # Session beenden
+gardener memo <text>            # Note
+gardener lesson <title> [text]  # Lesson
+gardener recall <query>         # Remember
+gardener consolidate            # Consolidate
+gardener session-end <text>     # End session
 ```
 
 Details: [KONZEPT.md#memory](KONZEPT.md#memory-kein-separates-gedaechtnis-system-design-entscheidung)
 
-## Tasks (kein separates System!)
+## Tasks (No Separate System!)
 
-Tasks sind Eintraege vom Typ `task` in der `everything`-Tabelle. **Kein separates
-Task-System noetig.** `find("steuer")` findet Wissen UND Tasks gleichzeitig.
+Tasks are entries of type `task` in the `everything` table. **No separate
+task system needed.** `find("taxes")` finds knowledge AND tasks simultaneously.
 
 ```python
-af.task("steuer-2025", content="Einreichen", priority="high", due="2026-05-31")
-af.tasks()                     # Alle Tasks
-af.tasks(status="open")        # Nur offene
-af.task_done("steuer-2025")    # Erledigt
+af.task("taxes-2025", content="File return", priority="high", due="2026-05-31")
+af.tasks()                     # All tasks
+af.tasks(status="open")        # Open only
+af.task_done("taxes-2025")     # Mark done
 ```
 
 ```bash
-gardener task <name> [text]     # Erstellen
-gardener tasks [status]         # Auflisten
-gardener done <name>            # Erledigt
+gardener task <name> [text]     # Create
+gardener tasks [status]         # List
+gardener done <name>            # Mark done
 ```
 
 Details: [KONZEPT.md#tasks](KONZEPT.md#tasks-kein-separates-system-design-entscheidung)
 
-## Drei Beziehungen zu Dateien
+## Three Relationships with Files
 
-1. **Beobachten:** Datei im Ordner, LLM liest mit (Blick aus dem Fenster)
-2. **Absorbieren:** Datei wird in die DB gezogen (lebt jetzt im Haus)
-3. **Direkt bearbeiten:** LLM editiert Datei im Ordner (arbeitet vor dem Haus)
+1. **Observe:** File stays in folder, LLM reads along (looking out the window)
+2. **Absorb:** File gets pulled into the DB (now lives in the house)
+3. **Direct edit:** LLM edits file in folder (working in front of the house)
 
 ## Transporter
 
 ```python
-af.absorb("/pfad/zur/datei.pdf")   # Datei → DB (dematerialisieren)
-af.materialize("datei.pdf")         # DB → Datei (rematerialisieren)
+af.absorb("/path/to/file.pdf")     # File → DB (dematerialize)
+af.materialize("file.pdf")          # DB → File (rematerialize)
 ```
 
 ## Seeding
 
 ```bash
-python seed.py    # Fuellt gardener.db mit Grundwissen und Beispiel-Tools
+python seed.py    # Populates gardener.db with base knowledge and example tools
 ```
 
-## Vergleich: Gardener vs Rinnsal
+## Comparison: Gardener vs Rinnsal
 
-Gardener und [Rinnsal](https://github.com/ellmos-ai/rinnsal) sind beide leichtgewichtige
-LLM-OSes aus dem ellmos-Oekosystem. Hier die Unterschiede im Detail:
+Gardener and [Rinnsal](https://github.com/ellmos-ai/rinnsal) are both lightweight
+LLM operating systems from the ellmos ecosystem. Here are the differences:
 
 | Feature | Detail | **Gardener** | **Rinnsal** |
 |---|---|---|---|
-| **Kern-API** | Stil | 4 Funktionen (find/get/put/run) | ~20 CLI-Kommandos, Modul-basiert |
-| **Datenmodell** | Tabellen | 1 (`everything` + Typ-Feld) | 4+ (facts, notes, lessons, sessions) |
-| | FTS5 Suche | Ja (Kern-Feature, IST das Gedaechtnis) | Nein (strukturierte Queries) |
-| **Memory** | Working | memo() mit Decay | notes (Session-scoped) |
-| | Langzeit | lesson() + Gewichtung | facts (Confidence-Score) |
-| | Konsolidierung | consolidate() (Decay+Forget) | Nein |
-| | Recall/Boost | recall() boostet Gewicht | Nein |
-| | Context-Export | Nein | api.context() (LLM-ready) |
-| **Tasks** | Prioritaeten | Ja (meta-Feld) | critical/high/medium/low |
-| | Agent-Zuweisung | Nein | Ja |
-| | Deadlines | Ja (due-Feld) | Nein |
-| **Files** | Absorb (Datei->DB) | Ja | Nein |
-| | Materialize (DB->Datei) | Ja | Nein |
-| | Observe (beobachten) | Ja | Nein |
-| | Blob-Halde (>50MB) | Ja | Nein |
-| **Automation** | Chains | Nein | Marble-Run-Modell |
-| | Ollama | Nein | Ja (REST-Client) |
-| **Connectors** | Telegram/Discord/HA | Nein (geplant) | Ja |
-| **Architektur** | Dependencies | Zero | Zero |
-| | Event-Bus | Nein | Ja |
-| | Multi-Agent | Nein | Ja (Event-Bus + USMC) |
+| **Core API** | Style | 4 functions (find/get/put/run) | ~20 CLI commands, module-based |
+| **Data Model** | Tables | 1 (`everything` + type field) | 4+ (facts, notes, lessons, sessions) |
+| | FTS5 Search | Yes (core feature, IS the memory) | No (structured queries) |
+| **Memory** | Working | memo() with decay | notes (session-scoped) |
+| | Long-term | lesson() + weighting | facts (confidence score) |
+| | Consolidation | consolidate() (decay+forget) | No |
+| | Recall/Boost | recall() boosts weight | No |
+| | Context Export | No | api.context() (LLM-ready) |
+| **Tasks** | Priorities | Yes (meta field) | critical/high/medium/low |
+| | Agent Assignment | No | Yes |
+| | Deadlines | Yes (due field) | No |
+| **Files** | Absorb (file→DB) | Yes | No |
+| | Materialize (DB→file) | Yes | No |
+| | Observe (watch) | Yes | No |
+| | Blob Storage (>50MB) | Yes | No |
+| **Automation** | Chains | No | Marble-run model |
+| | Ollama | No | Yes (REST client) |
+| **Connectors** | Telegram/Discord/HA | No (planned) | Yes |
+| **Architecture** | Dependencies | Zero | Zero |
+| | Event Bus | No | Yes |
+| | Multi-Agent | No | Yes (event bus + USMC) |
 
-**Kurzfassung:** Gardener = radikaler Minimalismus (1 Tabelle, Suche = alles).
-Rinnsal = mehr Struktur, dafuer Connectors und Chains out of the box.
+**In short:** Gardener = radical minimalism (1 table, search = everything).
+Rinnsal = more structure, but connectors and chains out of the box.
 
-## Erweiterbarkeit
+## Extensibility
 
-Gardener ist als Kern gedacht, der durch ellmos-Module erweiterbar wird:
+Gardener is designed as a core that can be extended with ellmos modules:
 
-| Modul | Funktion | Status |
-|-------|----------|--------|
-| [connectors](https://github.com/ellmos-ai/connectors) | Telegram, Discord, Webhook, etc. | Geplant |
-| [USMC](https://github.com/ellmos-ai/usmc) | Cross-Agent Shared Memory | Integrierbar |
-| [clutch](https://github.com/ellmos-ai/clutch) | Smart Model-Routing | Integrierbar |
-| [swarm-ai](https://github.com/ellmos-ai/swarm-ai) | Parallele LLM-Patterns | Integrierbar |
+| Module | Function | Status |
+|--------|----------|--------|
+| [connectors](https://github.com/ellmos-ai/connectors) | Telegram, Discord, Webhook, etc. | Planned |
+| [USMC](https://github.com/ellmos-ai/usmc) | Cross-Agent Shared Memory | Integrable |
+| [clutch](https://github.com/ellmos-ai/clutch) | Smart Model Routing | Integrable |
+| [swarm-ai](https://github.com/ellmos-ai/swarm-ai) | Parallel LLM Patterns | Integrable |
 
-Die Vision: Das LLM bedient sich selbst aus einer Bibliothek von Modulen.
-Gardener stellt die Suche, das Gedaechtnis und die Ausfuehrungsumgebung --
-alles andere kommt als Plugin dazu wenn es gebraucht wird.
+The vision: The LLM serves itself from a library of modules.
+Gardener provides search, memory, and the execution environment —
+everything else is added as a plugin when needed.
 
-## Konzept
+## Design Document
 
-Ausfuehrliche Designdokumentation: [KONZEPT.md](KONZEPT.md)
+Detailed design documentation: [KONZEPT.md](KONZEPT.md) (German)
