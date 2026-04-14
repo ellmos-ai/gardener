@@ -1,0 +1,23 @@
+# Gardener - Database-Based Operating System for LLMs
+
+> Gardener is a database-centric operating system for LLMs: everything -- knowledge, tools, memories, tasks -- lives in a single searchable SQLite database, exposed through four primitive operations (find, get, put, run). A minimalist counterpart to file-centric agent systems like BACH.
+
+Where BACH treats the filesystem as the LLM's working environment, Gardener treats the database as the working environment. The LLM does not navigate folders -- it queries, retrieves, stores, and executes. Code lives in the DB as tool rows and is materialized to a workspace only when run. Author: Lukas Geiger. Status: prototype. Python, SQLite, MIT.
+
+Core primitives: find (search across all entries), get (read entry by name), put (store knowledge, memory, tools, tasks), run (execute a tool with input), absorb (ingest files into DB), materialize (write DB content to workspace), observe (watch user folder for changes), sync, status. Data model: a single `entries` table typed as knowledge / tool / memory / task, split across `gardener.db` (system) and `user.db` (user data).
+
+## Docs
+
+- [README](https://github.com/ellmos-ai/gardener/blob/main/README.md): Overview, quick start, CLI, architecture, data model
+- [KONZEPT.md](https://github.com/ellmos-ai/gardener/blob/main/KONZEPT.md): Design rationale
+- [LICENSE](https://github.com/ellmos-ai/gardener/blob/main/LICENSE): MIT license text
+
+## Related projects
+
+- [BACH](https://github.com/ellmos-ai/bach): File-centric text-based OS for LLMs (the counterpart paradigm)
+- [USMC](https://github.com/ellmos-ai/usmc): Cross-agent shared memory primitive
+- [Rinnsal](https://github.com/ellmos-ai/rinnsal): Lightweight LLM agent infrastructure
+
+## Optional
+
+- [GitHub Issues](https://github.com/ellmos-ai/gardener/issues): Bug reports and feature requests
