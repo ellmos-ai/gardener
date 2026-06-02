@@ -1,0 +1,28 @@
+name: Gardener tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile sources
+        run: python -m compileall -q gardener.py seed.py i18n.py tests
+      - name: Run unit tests
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python -m unittest discover -s tests -v

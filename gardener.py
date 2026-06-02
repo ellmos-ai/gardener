@@ -44,7 +44,7 @@ DEFAULT_HOME = Path(os.environ.get(
     os.path.expanduser("~/gardener")
 ))
 
-# Schwellenwerte fuer Blob-Halde
+# Schwellenwerte für Blob-Halde
 BLOB_THRESHOLD_DIRECT = 1_000_000      # < 1MB: direkt in DB
 BLOB_THRESHOLD_WARN   = 50_000_000     # < 50MB: BLOB in DB mit Warnung
 # > 50MB: nur Index + Halde
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS everything (
 CREATE VIRTUAL TABLE IF NOT EXISTS everything_fts
     USING fts5(name, content, tags, content=everything, content_rowid=id);
 
--- Trigger fuer FTS-Sync
+-- Trigger für FTS-Sync
 CREATE TRIGGER IF NOT EXISTS everything_ai AFTER INSERT ON everything BEGIN
     INSERT INTO everything_fts(rowid, name, content, tags)
     VALUES (new.id, new.name, new.content, new.tags);
@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS shelves (
     created TEXT NOT NULL
 );
 
--- Blob-Index (fuer Dateien auf der Halde)
+-- Blob-Index (für Dateien auf der Halde)
 CREATE TABLE IF NOT EXISTS blobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     everything_id INTEGER REFERENCES everything(id) ON DELETE CASCADE,
@@ -154,14 +154,14 @@ class Gardener:
         conn.close()
 
     def _conn(self, target: str = "user") -> sqlite3.Connection:
-        """Gibt eine Connection zurueck. 'user' oder 'system'."""
+        """Gibt eine Connection zurück. 'user' oder 'system'."""
         path = self.user_db_path if target == "user" else self.system_db_path
         conn = sqlite3.connect(str(path))
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
 
-        # Andere DB attachen fuer uebergreifende Suche
+        # Andere DB attachen für übergreifende Suche
         other = self.system_db_path if target == "user" else self.user_db_path
         conn.execute(f"ATTACH DATABASE ? AS other", (str(other),))
         return conn
@@ -183,7 +183,7 @@ class Gardener:
             limit: Max. Ergebnisse
 
         Returns:
-            Liste von Eintraegen als Dicts
+            Liste von Einträgen als Dicts
         """
         conn = self._conn("user")
         results = []
@@ -279,9 +279,9 @@ class Gardener:
             content: Inhalt (Markdown, Text, Code)
             type: Typ (knowledge, tool, task, memory, config, document, export)
             tags: Komma-separierte Tags
-            meta: Zusaetzliche strukturierte Daten (JSON)
-            pinned: Fest gespeichert (ueberlebt Sync)
-            target: 'user', 'system', oder 'auto' (auto = user fuer die meisten)
+            meta: Zusätzliche strukturierte Daten (JSON)
+            pinned: Fest gespeichert (überlebt Sync)
+            target: 'user', 'system', oder 'auto' (auto = user für die meisten)
 
         Returns:
             Der geschriebene Eintrag als Dict
@@ -289,7 +289,7 @@ class Gardener:
         now = self._now()
         meta_json = json.dumps(meta or {}, ensure_ascii=False)
 
-        # Auto-Target: system nur fuer knowledge und tool
+        # Auto-Target: system nur für knowledge und tool
         if target == "auto":
             target = "system" if type in ("knowledge", "tool") else "user"
 
@@ -325,14 +325,14 @@ class Gardener:
     # ------------------------------------------------------------------
 
     def run(self, name: str, input: Optional[Dict] = None) -> Tuple[bool, str]:
-        """Fuehrt den Code-Block eines Eintrags aus.
+        """Führt den Code-Block eines Eintrags aus.
 
-        Materialisiert den Code in einen Workspace, fuehrt ihn aus,
-        gibt das Ergebnis zurueck.
+        Materialisiert den Code in einen Workspace, führt ihn aus,
+        gibt das Ergebnis zurück.
 
         Args:
             name: Name des Eintrags (muss type='tool' sein)
-            input: Parameter fuer die Ausfuehrung
+            input: Parameter für die Ausführung
 
         Returns:
             (success, output) Tuple
@@ -414,7 +414,7 @@ class Gardener:
         except Exception:
             meta["mimetype"] = "application/octet-stream"
 
-        # Groesse entscheidet ueber Speicherort
+        # Größe entscheidet über Speicherort
         if size > BLOB_THRESHOLD_WARN:
             # Halde: nur Index + Datei kopieren
             blob_hash = self._hash_file(file_path)
@@ -424,7 +424,7 @@ class Gardener:
             meta["blob_hash"] = blob_hash
             meta["storage"] = "halde"
         elif size > BLOB_THRESHOLD_DIRECT:
-            # In DB als BLOB (ueber blobs-Tabelle)
+            # In DB als BLOB (über blobs-Tabelle)
             meta["storage"] = "blob"
             blob_hash = self._hash_file(file_path)
             blob_dest = self.blob_dir / f"{blob_hash}{file_path.suffix}"
@@ -486,7 +486,7 @@ class Gardener:
     def observe(self, directory: Optional[Path] = None) -> List[Dict]:
         """Beobachtet den Ordner und aktualisiert die DB (Blick aus dem Fenster).
 
-        Scannt den Home-Ordner und erstellt/aktualisiert observed-Eintraege.
+        Scannt den Home-Ordner und erstellt/aktualisiert observed-Einträge.
 
         Returns:
             Liste der beobachteten Dateien
@@ -497,7 +497,7 @@ class Gardener:
         for file_path in directory.rglob("*"):
             if not file_path.is_file():
                 continue
-            # Interne Ordner ueberspringen
+            # Interne Ordner überspringen
             rel = file_path.relative_to(directory)
             if str(rel).startswith(("export", ".gardener", "__pycache__")):
                 continue
@@ -513,7 +513,7 @@ class Gardener:
                 except Exception:
                     content = f"[Datei nicht lesbar: {file_path.suffix}]"
             else:
-                content = f"[Binaerdatei: {file_path.name}, {file_path.stat().st_size} Bytes]"
+                content = f"[Binärdatei: {file_path.name}, {file_path.stat().st_size} Bytes]"
 
             meta = {
                 "path": str(file_path),
@@ -532,7 +532,7 @@ class Gardener:
         return observed
 
     def sync(self) -> Dict:
-        """Fuehrt einen Sync-Zyklus durch: Absorber leeren + Ordner beobachten.
+        """Führt einen Sync-Zyklus durch: Absorber leeren + Ordner beobachten.
 
         1. .absorber/ → Dateien absorbieren und aus Ordner entfernen
         2. Rest des Home-Ordners → beobachten (nur Text lesen)
@@ -565,7 +565,7 @@ class Gardener:
             if not file_path.is_file():
                 continue
 
-            # Interne Ordner ueberspringen
+            # Interne Ordner überspringen
             rel = str(file_path.relative_to(self.home))
             if rel.startswith((".absorber", ".output", ".gardener", "__pycache__")):
                 continue
@@ -589,7 +589,7 @@ class Gardener:
                     except Exception:
                         content = f"[Nicht lesbar: {file_path.suffix}]"
                 else:
-                    content = f"[Binaerdatei: {file_path.name}, {file_path.stat().st_size} Bytes]"
+                    content = f"[Binärdatei: {file_path.name}, {file_path.stat().st_size} Bytes]"
 
                 meta = {
                     "path": str(file_path),
@@ -608,7 +608,7 @@ class Gardener:
         return {"absorbed": absorbed_count, "observed": observed_count, "mode": mode}
 
     # ------------------------------------------------------------------
-    # Task-Komfort (Tasks = Eintraege vom Typ 'task' in user.db)
+    # Task-Komfort (Tasks = Einträge vom Typ 'task' in user.db)
     # ------------------------------------------------------------------
 
     def tasks(self, status: Optional[str] = None) -> List[Dict]:
@@ -678,9 +678,9 @@ class Gardener:
     # ------------------------------------------------------------------
 
     def memo(self, text: str, tags: str = "") -> Dict:
-        """Schreibt ins Arbeitsgedaechtnis (Working Memory).
+        """Schreibt ins Arbeitsgedächtnis (Working Memory).
 
-        Kurzlebige Notizen fuer die aktuelle Session.
+        Kurzlebige Notizen für die aktuelle Session.
         Werden bei Konsolidierung verdichtet oder vergessen.
         """
         name = f"memo/{self._now().replace(':', '-')}"
@@ -707,7 +707,7 @@ class Gardener:
                         target="user")
 
     def session_end(self, summary: str) -> Dict:
-        """Speichert einen Session-Bericht (Episodisches Gedaechtnis).
+        """Speichert einen Session-Bericht (Episodisches Gedächtnis).
 
         Format empfohlen: "THEMA: Was. ERLEDIGT: Was. NAECHSTE: Was."
         """
@@ -721,8 +721,8 @@ class Gardener:
     def recall(self, query: str, limit: int = 5) -> List[Dict]:
         """Erinnert sich -- sucht in Memory, Lessons und Sessions.
 
-        Wie find(), aber auf Gedaechtnis-Typen beschraenkt und
-        erhoeht das Gewicht abgerufener Eintraege (Boost).
+        Wie find(), aber auf Gedächtnis-Typen beschränkt und
+        erhöht das Gewicht abgerufener Einträge (Boost).
         """
         conn = self._conn("user")
         results = []
@@ -764,11 +764,11 @@ class Gardener:
         return results[:limit]
 
     def consolidate(self) -> Dict:
-        """Konsolidiert das Gedaechtnis (= Schlaf).
+        """Konsolidiert das Gedächtnis (= Schlaf).
 
-        1. Decay: Gewicht aller Eintraege reduzieren
-        2. Forget: Eintraege unter Schwellenwert deaktivieren
-        3. Stats zurueckgeben
+        1. Decay: Gewicht aller Einträge reduzieren
+        2. Forget: Einträge unter Schwellenwert deaktivieren
+        3. Stats zurückgeben
 
         Einfacher als BACHs 6-Stufen-Pipeline, aber gleicher Effekt:
         Wichtiges bleibt, Unwichtiges verblasst.
@@ -777,7 +777,7 @@ class Gardener:
         now = self._now()
         stats = {"decayed": 0, "forgotten": 0, "kept": 0}
 
-        # Alle Memory-artigen Eintraege mit Gewicht
+        # Alle Memory-artigen Einträge mit Gewicht
         rows = conn.execute("""
             SELECT id, name, type, meta FROM main.everything
             WHERE type IN ('memory', 'lesson', 'session')
@@ -800,7 +800,7 @@ class Gardener:
             meta["last_decay"] = now
 
             if new_weight < 0.05:
-                # Vergessen: Eintrag loeschen (unter Schwelle)
+                # Vergessen: Eintrag löschen (unter Schwelle)
                 conn.execute("DELETE FROM main.everything WHERE id = ?", (row["id"],))
                 stats["forgotten"] += 1
             else:
@@ -849,10 +849,10 @@ class Gardener:
     # ------------------------------------------------------------------
 
     def delete(self, name: str) -> bool:
-        """Loescht einen Eintrag aus der DB.
+        """Löscht einen Eintrag aus der DB.
 
         Sucht in user.db, dann in system.db.
-        Returns: True wenn geloescht, False wenn nicht gefunden.
+        Returns: True wenn gelöscht, False wenn nicht gefunden.
         """
         for target in ("user", "system"):
             conn = self._conn(target)
@@ -868,7 +868,7 @@ class Gardener:
         return False
 
     def list(self, type: Optional[str] = None, limit: int = 50) -> List[Dict]:
-        """Listet alle Eintraege. Optional nach Typ filtern.
+        """Listet alle Einträge. Optional nach Typ filtern.
 
         Ohne Suchbegriff -- einfach alles zeigen.
         """
@@ -894,7 +894,7 @@ class Gardener:
         return results[:limit]
 
     def status(self) -> Dict:
-        """Gibt den Status des Systems zurueck."""
+        """Gibt den Status des Systems zurück."""
         info = {
             "home": str(self.home),
             "data_dir": str(self.data_dir),
@@ -1026,39 +1026,44 @@ if 'execute' in dir():
 # ---------------------------------------------------------------------------
 
 def main():
-    """Minimales CLI fuer Gardener."""
+    """Minimales CLI für Gardener."""
+    from i18n import t
     af = Gardener()
 
     if len(sys.argv) < 2:
-        print("Gardener -- LLM-natives Betriebssystem")
+        print(t("help.title"))
         print()
         s = af.status()
-        print(f"  Home:      {s['home']}")
-        print(f"  Daten:     {s['data_dir']}")
-        print(f"  System-DB: {s['system_entries']} Eintraege")
-        print(f"  User-DB:   {s['user_entries']} Eintraege")
-        print(f"  Halde:     {s['blobs']['count']} Dateien ({s['blobs']['size_mb']} MB)")
+        print(f"  {t('help.home')}:      {s['home']}")
+        print(f"  {t('help.data')}:     {s['data_dir']}")
+        print(f"  {t('help.system_db')}: {s['system_entries']} {t('help.entries')}")
+        print(f"  {t('help.user_db')}:   {s['user_entries']} {t('help.entries')}")
+        print(f"  {t('help.heap')}:     {s['blobs']['count']} {t('help.files')} ({s['blobs']['size_mb']} MB)")
         print()
-        print("Befehle:")
-        print("  gardener find <query>        Suchen")
-        print("  gardener get <name>          Eintrag lesen")
-        print("  gardener put <name> <text>   Eintrag schreiben")
-        print("  gardener run <name>          Tool ausfuehren")
-        print("  gardener absorb <datei>      Datei absorbieren (Transporter IN)")
-        print("  gardener materialize <name>  Eintrag als Datei (Transporter OUT)")
-        print("  gardener sync                Absorber leeren + Ordner beobachten")
-        print("  gardener observe             Ordner scannen (nur beobachten)")
-        print("  gardener memo <text>         Notiz ins Arbeitsgedaechtnis")
-        print("  gardener lesson <titel> [text] Lektion speichern (Best Practice)")
-        print("  gardener recall <query>      Erinnern (sucht in Memory/Lessons/Sessions)")
-        print("  gardener consolidate         Gedaechtnis konsolidieren (Decay/Forget)")
-        print("  gardener session-end <text>  Session-Bericht speichern")
-        print("  gardener tasks [status]      Tasks auflisten (open/doing/done)")
-        print("  gardener task <name> [text]  Task erstellen")
-        print("  gardener done <name>         Task als erledigt markieren")
-        print("  gardener list [typ]          Alle Eintraege auflisten")
-        print("  gardener delete <name>       Eintrag loeschen")
-        print("  gardener status              System-Status")
+        print(t("help.commands"))
+        commands = [
+            ("gardener find <query>", "cmd.find"),
+            ("gardener get <name>", "cmd.get"),
+            ("gardener put <name> <text>", "cmd.put"),
+            ("gardener run <name>", "cmd.run"),
+            ("gardener absorb <datei>", "cmd.absorb"),
+            ("gardener materialize <name>", "cmd.materialize"),
+            ("gardener sync", "cmd.sync"),
+            ("gardener observe", "cmd.observe"),
+            ("gardener memo <text>", "cmd.memo"),
+            ("gardener lesson <titel> [text]", "cmd.lesson"),
+            ("gardener recall <query>", "cmd.recall"),
+            ("gardener consolidate", "cmd.consolidate"),
+            ("gardener session-end <text>", "cmd.session_end"),
+            ("gardener tasks [status]", "cmd.tasks"),
+            ("gardener task <name> [text]", "cmd.task"),
+            ("gardener done <name>", "cmd.done"),
+            ("gardener list [typ]", "cmd.list"),
+            ("gardener delete <name>", "cmd.delete"),
+            ("gardener status", "cmd.status"),
+        ]
+        for usage, label_key in commands:
+            print(f"  {usage:<32} {t(label_key)}")
         return
 
     cmd = sys.argv[1]
@@ -1129,12 +1134,12 @@ def main():
             src = e.get("source", "?")
             print(f"  [{e['type']:10s}] {e['name']:40s} ({src})")
         if not entries:
-            print("  Keine Eintraege.")
+            print("  Keine Einträge.")
 
     elif cmd == "delete":
         name = sys.argv[2] if len(sys.argv) > 2 else ""
         if af.delete(name):
-            print(f"  [OK] '{name}' geloescht")
+            print(f"  [OK] '{name}' gelöscht")
         else:
             print(f"  Nicht gefunden: {name}")
 
@@ -1165,9 +1170,9 @@ def main():
 
     elif cmd == "consolidate":
         stats = af.consolidate()
-        print(f"  Decay:     {stats['decayed']} Eintraege verblasst")
-        print(f"  Vergessen: {stats['forgotten']} Eintraege geloescht")
-        print(f"  Behalten:  {stats['kept']} Eintraege stabil")
+        print(f"  Decay:     {stats['decayed']} Einträge verblasst")
+        print(f"  Vergessen: {stats['forgotten']} Einträge gelöscht")
+        print(f"  Behalten:  {stats['kept']} Einträge stabil")
 
     elif cmd == "session-end":
         summary = " ".join(sys.argv[2:]) if len(sys.argv) > 2 else ""

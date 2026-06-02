@@ -4,6 +4,8 @@
 
 # gardener — Database-Based OS for LLMs
 
+[![Gardener tests](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml/badge.svg)](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml)
+
 **🇬🇧 [English Version](README.md)**
 
 > Status: Prototyp | Autor: Lukas Geiger + Claude | 2026-03-12
@@ -45,6 +47,10 @@ python gardener.py sync
 python gardener.py observe
 python gardener.py status
 ```
+
+Die CLI-Hilfe ist standardmäßig deutsch. Mit `GARDENER_LANG=en` wird die
+englische Hilfe ausgegeben; nicht unterstützte Sprachen fallen auf Deutsch
+und Englisch zurück.
 
 ## Architektur
 
