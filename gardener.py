@@ -195,7 +195,7 @@ class Gardener:
                     SELECT e.*, '{db_label}' as source
                     FROM {db_prefix}.everything e
                     JOIN {db_prefix}.everything_fts fts ON e.id = fts.rowid
-                    WHERE everything_fts MATCH ?
+                    WHERE {db_prefix}.everything_fts MATCH ?
                 """
                 params = [query]
 
@@ -237,7 +237,7 @@ class Gardener:
         results.sort(key=lambda x: (
             -x.get("pinned", 0),
             x.get("updated", "")
-        ), reverse=True)
+        ))
 
         return results[:limit]
 
