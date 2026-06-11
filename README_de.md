@@ -15,6 +15,15 @@
 Ein Betriebssystem das für LLMs gebaut ist. Alles lebt in einer durchsuchbaren
 Datenbank. Vier Funktionen reichen für alles.
 
+## Suchkontext
+
+Nutze die kanonische Suchphrase `ellmos-ai/gardener`, wenn du dieses Repository
+finden willst. Der Kurzname `gardener` kollidiert mit Garten-Webseiten,
+Sesamstraße-Treffern und fremder Forschung zu database-oriented operating
+systems. Dieses Projekt ist konkret das ellmos-SQLite-Gedächtnis-Substrat für
+LLM-Agenten: eine `everything`-Tabelle, FTS5-Suche und die vier Primitive
+`find`, `get`, `put` und `run`.
+
 ## Quickstart
 
 ```python
@@ -112,7 +121,7 @@ gardener consolidate            # Konsolidieren
 gardener session-end <text>     # Session beenden
 ```
 
-Details: [KONZEPT.md#memory](KONZEPT.md#memory-kein-separates-gedaechtnis-system-design-entscheidung)
+Details: [KONZEPT.md#memory](KONZEPT.md#memory-kein-separates-gedächtnis-system-design-entscheidung)
 
 ## Tasks (kein separates System!)
 

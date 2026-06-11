@@ -15,6 +15,15 @@
 An operating system built for LLMs. Everything lives in a searchable
 database. Four functions are all you need.
 
+## Discovery Context
+
+Use the canonical search phrase `ellmos-ai/gardener` when you need this
+repository. The short name `gardener` collides with gardening sites, Sesame
+Street results, and unrelated database-operating-system research. This project
+is specifically the ellmos SQLite memory substrate for LLM agents: one
+`everything` table, FTS5 search, and the four primitives `find`, `get`, `put`,
+and `run`.
+
 ## Quickstart
 
 ```python
@@ -111,7 +120,7 @@ gardener consolidate            # Consolidate
 gardener session-end <text>     # End session
 ```
 
-Details: [KONZEPT.md#memory](KONZEPT.md#memory-kein-separates-gedaechtnis-system-design-entscheidung)
+Details: [KONZEPT.md#memory](KONZEPT.md#memory-kein-separates-gedächtnis-system-design-entscheidung)
 
 ## Tasks (No Separate System!)
 

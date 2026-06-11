@@ -1,5 +1,8 @@
 # Gardener - Database-Based Operating System for LLMs
 
+Last-checked: 2026-06-11
+Canonical repository: https://github.com/ellmos-ai/gardener
+
 > Gardener is a database-centric operating system for LLMs: everything -- knowledge, tools, memories, tasks -- lives in a single searchable SQLite database, exposed through four primitive operations (find, get, put, run). A minimalist counterpart to file-centric agent systems like BACH.
 
 Where BACH treats the filesystem as the LLM's working environment, Gardener treats the database as the working environment. The LLM does not navigate folders -- it queries, retrieves, stores, and executes. Code lives in the DB as tool rows and is materialized to a workspace only when run. Author: Lukas Geiger. Status: prototype. Python, SQLite, MIT.
@@ -9,11 +12,38 @@ Core primitives: find (search across all entries), get (read entry by name), put
 Testing: run `python -m unittest discover -s tests -v`. CI uses the same
 stdlib test command on Python 3.10, 3.11, and 3.12.
 
+## Audience
+
+- LLM-agent builders who want inspectable local memory without a hosted platform
+- Developers comparing file-centric agent operating systems with database-centric ones
+- Researchers prototyping SQLite/FTS5-backed agent memory, task state, and tool storage
+- People searching for the ellmos minimal OS layer rather than gardening content or generic DBOS research
+
+## Preferred Search Phrases
+
+```text
+ellmos-ai/gardener
+ellmos gardener LLM operating system
+Gardener database-based OS for LLMs
+SQLite FTS5 memory substrate for LLM agents
+database-centric LLM agent memory
+one-table operating substrate for AI agents
+find get put run LLM OS
+ellmos SQLite everything table agent memory
+```
+
+## Disambiguation
+
+Gardener is not a plant database, gardening app, Sesame Street / Elmo result, or
+the DBOS research project. It is a small ellmos prototype for local-first LLM
+agents that store knowledge, tools, memories, tasks, and absorbed files in
+SQLite.
+
 ## Docs
 
-- [README](https://github.com/ellmos-ai/gardener/blob/main/README.md): Overview, quick start, CLI, architecture, data model
-- [KONZEPT.md](https://github.com/ellmos-ai/gardener/blob/main/KONZEPT.md): Design rationale
-- [LICENSE](https://github.com/ellmos-ai/gardener/blob/main/LICENSE): MIT license text
+- [README](https://github.com/ellmos-ai/gardener/blob/master/README.md): Overview, quick start, CLI, architecture, data model
+- [KONZEPT.md](https://github.com/ellmos-ai/gardener/blob/master/KONZEPT.md): Design rationale
+- [LICENSE](https://github.com/ellmos-ai/gardener/blob/master/LICENSE): MIT license text
 
 ## Related projects
 
