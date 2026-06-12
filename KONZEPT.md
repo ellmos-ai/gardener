@@ -512,12 +512,12 @@ LLM editiert ~/gardener/dokumente/bericht.md
 Die Datenbank lebt **lokal** (App-Ordner), nicht im Cloud-Sync-Ordner.
 
 ```
-C:\Users\User\AppData\Local\Gardener\     ← DB lebt hier (lokal)
+~/.gardener/                               ← DB lebt hier (lokal, Env: GARDENER_DATA)
   gardener.db
   user.db
   blobs/                                  ← Große Dateien (Halde)
 
-~/gardener/                                ← Ordner lebt hier (OneDrive ok)
+~/gardener/                                ← Ordner lebt hier (OneDrive ok, Env: GARDENER_HOME)
   .absorber/                              ← Briefkasten (Dateien → DB)
   .output/                                ← Ausgabe (DB → Dateien)
   dokumente/                              ← Beobachtete Dateien
@@ -547,7 +547,7 @@ DB bekommt:
         "original_name": "urlaubsvideo.mp4"}
 
 Datei landet auf der Halde:
-  AppData/Local/Gardener/blobs/a7f3b2c1.mp4
+  ~/.gardener/blobs/a7f3b2c1.mp4
 
 Für den User sieht es so aus als wäre die Datei in die DB
 gezogen worden. Sie ist weg aus dem Ordner. Will er sie wieder:

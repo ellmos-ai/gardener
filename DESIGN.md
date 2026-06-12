@@ -510,12 +510,12 @@ LLM edits ~/gardener/documents/report.md
 The database lives **locally** (app folder), not in the cloud sync folder.
 
 ```
-C:\Users\User\AppData\Local\Gardener\     ← DB lives here (local)
+~/.gardener/                               ← DB lives here (local, env: GARDENER_DATA)
   gardener.db
   user.db
   blobs/                                  ← Large files (heap)
 
-~/gardener/                                ← Folder lives here (OneDrive ok)
+~/gardener/                                ← Folder lives here (OneDrive ok, env: GARDENER_HOME)
   .absorber/                              ← Mailbox (files → DB)
   .output/                                ← Output (DB → files)
   documents/                              ← Observed files
@@ -545,7 +545,7 @@ DB gets:
         "original_name": "vacation-video.mp4"}
 
 File lands on the heap:
-  AppData/Local/Gardener/blobs/a7f3b2c1.mp4
+  ~/.gardener/blobs/a7f3b2c1.mp4
 
 For the user it looks like the file was pulled into the DB.
 It's gone from the folder. Want it back:

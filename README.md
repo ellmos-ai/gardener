@@ -71,13 +71,13 @@ Gardener/
   workspace/           # Materialized code for execution
   blobs/               # Storage for large files (>50MB)
 
-Local (not in cloud):
-  AppData/Local/Gardener/
+Local (not in cloud, override with GARDENER_DATA):
+  ~/.gardener/
     gardener.db        # System: Knowledge, tools, blueprints
     user.db            # User: Memory, tasks, personal data
     blobs/             # Large files
 
-User directory (cloud ok):
+User directory (cloud ok, override with GARDENER_HOME):
   ~/gardener/
     .absorber/         # Files here → automatically absorbed into DB
     .output/           # Materialized files appear here

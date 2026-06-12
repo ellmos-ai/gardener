@@ -72,13 +72,13 @@ Gardener/
   workspace/          # Materialisierter Code zur Ausführung
   blobs/              # Halde für große Dateien (>50MB)
 
-Lokal (nicht in Cloud):
-  AppData/Local/Gardener/
+Lokal (nicht in Cloud, überschreibbar mit GARDENER_DATA):
+  ~/.gardener/
     gardener.db        # System: Wissen, Tools, Blaupausen
     user.db           # User: Memory, Tasks, persönliche Daten
     blobs/            # Große Dateien
 
-User-Ordner (Cloud ok):
+User-Ordner (Cloud ok, überschreibbar mit GARDENER_HOME):
   ~/gardener/
     .absorber/        # Dateien hier → automatisch in DB absorbiert
     .output/          # Materialisierte Dateien erscheinen hier
