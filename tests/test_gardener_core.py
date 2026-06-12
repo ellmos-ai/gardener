@@ -65,6 +65,15 @@ class TestGardenerCore(GardenerTempCase):
         self.assertIsNotNone(done)
         self.assertEqual(done["meta"]["status"], "done")
 
+    def test_tasks_sorted_by_semantic_priority(self):
+        self.af.task("t-low", "x", priority="low")
+        self.af.task("t-critical", "x", priority="critical")
+        self.af.task("t-normal", "x", priority="normal")
+        self.af.task("t-high", "x", priority="high")
+
+        names = [task["name"] for task in self.af.tasks()]
+        self.assertEqual(names, ["t-critical", "t-high", "t-normal", "t-low"])
+
     def test_observe_skips_internal_runtime_dirs(self):
         home = Path(os.environ["GARDENER_HOME"])
         (home / "notes.md").write_text("sichtbar", encoding="utf-8")

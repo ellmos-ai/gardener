@@ -627,7 +627,17 @@ class Gardener:
             sql += " AND json_extract(meta, '$.status') = ?"
             params.append(status)
 
-        sql += " ORDER BY json_extract(meta, '$.priority') DESC, updated DESC"
+        # Semantic priority order (critical > high > normal > low),
+        # not alphabetical string order
+        sql += """
+            ORDER BY CASE json_extract(meta, '$.priority')
+                WHEN 'critical' THEN 4
+                WHEN 'high' THEN 3
+                WHEN 'normal' THEN 2
+                WHEN 'low' THEN 1
+                ELSE 2
+            END DESC, updated DESC
+        """
         rows = conn.execute(sql, params).fetchall()
         conn.close()
         return [self._row_to_dict(row) for row in rows]
