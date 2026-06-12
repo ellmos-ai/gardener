@@ -65,6 +65,22 @@ class TestGardenerCore(GardenerTempCase):
         self.assertIsNotNone(done)
         self.assertEqual(done["meta"]["status"], "done")
 
+    def test_absorb_sets_original_name_and_materialize_uses_it(self):
+        base = Path(self.temp.name)
+        source = base / "bericht.bin"
+        source.write_bytes(b"\x00\x01\x02gardener")
+
+        entry = self.af.absorb(source)
+        self.assertEqual(entry["meta"]["original_name"], "bericht.bin")
+        self.assertEqual(entry["meta"]["storage"], "inline")
+        self.assertIn("blob_path", entry["meta"])
+
+        out_dir = base / "out"
+        out_path = self.af.materialize("bericht.bin", dest=out_dir)
+        self.assertIsNotNone(out_path)
+        self.assertEqual(out_path.name, "bericht.bin")
+        self.assertEqual(out_path.read_bytes(), b"\x00\x01\x02gardener")
+
     def test_consolidate_never_touches_pinned_entries(self):
         self.af.put(
             "pinned-memo",

@@ -2,6 +2,14 @@
 
 ## 2026-06-12
 
+- Removed the never-populated `blobs` table from the schema: blob metadata (`blob_path`, `blob_hash`, `size`, `mimetype`, `original_name`) deliberately lives in the entry's `meta` JSON, which is what `absorb()`/`materialize()` and the design docs already use. Deliberate decision, see DESIGN.md/KONZEPT.md.
+- `absorb()` now stores `original_name` in `meta` (was only `original_path`), matching what `materialize()` reads and what the design docs document.
+- `observe()` now skips the internal runtime dirs `.absorber/`, `.output/`, `.gardener/`, `__pycache__/` via a skip list shared with `sync()` (previously it skipped a stale `export` prefix and indexed absorber/output files).
+- Tasks are now sorted by semantic priority (critical > high > normal > low) instead of alphabetical string order.
+- `find()` now preserves FTS5 relevance (bm25 rank) for full-text hits; LIKE-fallback results are ordered newest first. Previously the final sort discarded the rank and listed oldest entries first.
+- `consolidate()` no longer decays or forgets pinned entries.
+- Documentation: corrected the local data directory to `~/.gardener` (env `GARDENER_DATA`) in README, README_de, KONZEPT and DESIGN; the previously documented `AppData/Local/Gardener/` path was never used by the code.
+- Added regression tests for all fixes above (test suite: 5 -> 10 tests).
 - Replaced romanized German umlaut spellings in seeded user-facing knowledge and bridge-tool descriptions with real umlauts.
 - Updated German runtime error messages for tool execution failures to use real umlauts.
 - Added a regression test that verifies seeded German texts no longer contain the old `ae`/`oe`/`ue` spellings.

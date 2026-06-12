@@ -99,17 +99,10 @@ CREATE TABLE IF NOT EXISTS shelves (
     created TEXT NOT NULL
 );
 
--- Blob-Index (für Dateien auf der Halde)
-CREATE TABLE IF NOT EXISTS blobs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    everything_id INTEGER REFERENCES everything(id) ON DELETE CASCADE,
-    blob_hash TEXT NOT NULL,
-    original_name TEXT,
-    size INTEGER,
-    mimetype TEXT,
-    blob_path TEXT NOT NULL,
-    created TEXT NOT NULL
-);
+-- Hinweis: Blob-Metadaten (blob_path, blob_hash, size, mimetype,
+-- original_name) liegen bewusst im meta-JSON des everything-Eintrags.
+-- Eine frühere separate blobs-Tabelle wurde nie befüllt und entfernt
+-- (siehe CHANGELOG 2026-06-12).
 """
 
 
@@ -405,6 +398,7 @@ class Gardener:
         content = ""
         meta = {
             "original_path": str(file_path),
+            "original_name": name,
             "size": size,
             "absorbed": True,
             "absorbed_at": self._now(),

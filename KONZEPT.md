@@ -560,6 +560,11 @@ gezogen worden. Sie ist weg aus dem Ordner. Will er sie wieder:
 - > 50MB: Nur Index in DB, Datei auf Halde
 - Konfigurierbar pro Installation
 
+Blob-Metadaten (`blob_path`, `blob_hash`, `size`, `mimetype`,
+`original_name`) liegen im `meta`-JSON des Eintrags — bewusst keine
+separate Blob-Index-Tabelle (eine nie befüllte `blobs`-Tabelle wurde
+2026-06-12 aus dem Schema entfernt).
+
 ---
 
 ## Memory: Kein separates Gedächtnis-System (Design-Entscheidung)

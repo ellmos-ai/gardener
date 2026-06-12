@@ -558,6 +558,11 @@ It's gone from the folder. Want it back:
 - > 50MB: Only index in DB, file on heap
 - Configurable per installation
 
+Blob metadata (`blob_path`, `blob_hash`, `size`, `mimetype`,
+`original_name`) lives in the entry's `meta` JSON — deliberately no
+separate blob index table (a never-populated `blobs` table was removed
+from the schema on 2026-06-12).
+
 ---
 
 ## Memory: No Separate Memory System (Design Decision)
