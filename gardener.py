@@ -49,6 +49,9 @@ BLOB_THRESHOLD_DIRECT = 1_000_000      # < 1MB: direkt in DB
 BLOB_THRESHOLD_WARN   = 50_000_000     # < 50MB: BLOB in DB mit Warnung
 # > 50MB: nur Index + Halde
 
+# Internal runtime directories that observe()/sync() must never index
+INTERNAL_SKIP_PREFIXES = (".absorber", ".output", ".gardener", "__pycache__")
+
 
 # ---------------------------------------------------------------------------
 # Schema
@@ -499,7 +502,7 @@ class Gardener:
                 continue
             # Interne Ordner überspringen
             rel = file_path.relative_to(directory)
-            if str(rel).startswith(("export", ".gardener", "__pycache__")):
+            if self._is_internal(str(rel)):
                 continue
 
             name = f"observed/{rel}"
@@ -567,7 +570,7 @@ class Gardener:
 
             # Interne Ordner überspringen
             rel = str(file_path.relative_to(self.home))
-            if rel.startswith((".absorber", ".output", ".gardener", "__pycache__")):
+            if self._is_internal(rel):
                 continue
 
             if mode == "always_absorb":
@@ -956,6 +959,14 @@ class Gardener:
     # ------------------------------------------------------------------
     # Hilfsfunktionen
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_internal(rel: str) -> bool:
+        """True if a path relative to home points into an internal runtime dir.
+
+        Shared skip logic for observe() and sync().
+        """
+        return rel.startswith(INTERNAL_SKIP_PREFIXES)
 
     def _row_to_dict(self, row: sqlite3.Row) -> Dict:
         """Konvertiert eine DB-Row in ein Dict."""

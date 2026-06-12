@@ -65,6 +65,32 @@ class TestGardenerCore(GardenerTempCase):
         self.assertIsNotNone(done)
         self.assertEqual(done["meta"]["status"], "done")
 
+    def test_observe_skips_internal_runtime_dirs(self):
+        home = Path(os.environ["GARDENER_HOME"])
+        (home / "notes.md").write_text("sichtbar", encoding="utf-8")
+        (home / ".absorber" / "incoming.txt").write_text("intern", encoding="utf-8")
+        (home / ".output" / "exported.md").write_text("intern", encoding="utf-8")
+        (home / ".gardener").mkdir(exist_ok=True)
+        (home / ".gardener" / "state.txt").write_text("intern", encoding="utf-8")
+
+        observed = self.af.observe()
+        names = [entry["name"] for entry in observed]
+
+        self.assertIn("observed/notes.md", names)
+        for name in names:
+            self.assertFalse(
+                name.startswith(("observed/.absorber", "observed/.output",
+                                 "observed/.gardener", "observed/__pycache__")),
+                f"internal runtime file observed: {name}",
+            )
+
+        # observe() and sync() must apply the same skip logic
+        self.af.sync()
+        entries = self.af.list(type="observed", limit=100)
+        self.assertEqual(
+            sorted(entry["name"] for entry in entries), sorted(names)
+        )
+
     def test_seeded_german_user_texts_use_real_umlauts(self):
         import seed
 
