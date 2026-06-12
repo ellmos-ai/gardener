@@ -10,6 +10,7 @@
 - `consolidate()` no longer decays or forgets pinned entries.
 - Documentation: corrected the local data directory to `~/.gardener` (env `GARDENER_DATA`) in README, README_de, KONZEPT and DESIGN; the previously documented `AppData/Local/Gardener/` path was never used by the code.
 - Added regression tests for all fixes above (test suite: 5 -> 10 tests).
+- Added a minimal `pyproject.toml` (distribution `gardener-os`, since `gardener` is taken on PyPI; console script `gardener = gardener:main`, requires-python >=3.10, zero runtime dependencies). Verified with an editable install in a throwaway venv.
 - Replaced romanized German umlaut spellings in seeded user-facing knowledge and bridge-tool descriptions with real umlauts.
 - Updated German runtime error messages for tool execution failures to use real umlauts.
 - Added a regression test that verifies seeded German texts no longer contain the old `ae`/`oe`/`ue` spellings.
