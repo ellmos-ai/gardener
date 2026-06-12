@@ -195,7 +195,7 @@ class Gardener:
         for db_prefix, db_label in [("main", "user"), ("other", "system")]:
             try:
                 sql = f"""
-                    SELECT e.*, '{db_label}' as source
+                    SELECT e.*, fts.rank AS rank, '{db_label}' as source
                     FROM {db_prefix}.everything e
                     JOIN {db_prefix}.everything_fts fts ON e.id = fts.rowid
                     WHERE {db_prefix}.everything_fts MATCH ?
@@ -236,11 +236,16 @@ class Gardener:
 
         conn.close()
 
-        # Nach Relevanz sortieren (pinned zuerst, dann nach updated)
+        # Nach Relevanz sortieren: pinned zuerst, dann FTS-Rank (bm25,
+        # kleiner = relevanter); LIKE-Fallback-Treffer (ohne Rank) werden
+        # untereinander neueste zuerst sortiert.
+        results.sort(key=lambda x: x.get("updated", ""), reverse=True)
         results.sort(key=lambda x: (
             -x.get("pinned", 0),
-            x.get("updated", "")
+            x.get("rank", 0.0)
         ))
+        for r in results:
+            r.pop("rank", None)
 
         return results[:limit]
 

@@ -65,6 +65,33 @@ class TestGardenerCore(GardenerTempCase):
         self.assertIsNotNone(done)
         self.assertEqual(done["meta"]["status"], "done")
 
+    def test_find_orders_fts_hits_by_relevance(self):
+        # Older but weaker match (single occurrence, long document)
+        self.af.put(
+            "zebra-weak",
+            content="zebra " + " ".join(f"wort{i}" for i in range(60)),
+            type="memory",
+        )
+        time.sleep(1.1)  # put() timestamps have second precision
+        # Newer and stronger match (high term frequency, short document)
+        self.af.put("zebra-strong", content="zebra zebra zebra", type="memory")
+
+        results = self.af.find("zebra")
+        names = [r["name"] for r in results]
+        self.assertEqual(names[0], "zebra-strong")
+        # Internal rank must not leak into the API result
+        self.assertNotIn("rank", results[0])
+
+        # Pinned entries still come first regardless of relevance
+        self.af.put(
+            "zebra-weak",
+            content="zebra " + " ".join(f"wort{i}" for i in range(60)),
+            type="memory",
+            pinned=True,
+        )
+        names = [r["name"] for r in self.af.find("zebra")]
+        self.assertEqual(names[0], "zebra-weak")
+
     def test_tasks_sorted_by_semantic_priority(self):
         self.af.task("t-low", "x", priority="low")
         self.af.task("t-critical", "x", priority="critical")
