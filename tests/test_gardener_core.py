@@ -1,8 +1,14 @@
 import importlib
+import contextlib
+import gc
+import io
 import os
+import re
+import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -23,7 +29,15 @@ class GardenerTempCase(unittest.TestCase):
         self.af = self.gardener.Gardener()
 
     def tearDown(self):
-        self.temp.cleanup()
+        gc.collect()
+        for attempt in range(3):
+            try:
+                self.temp.cleanup()
+                break
+            except PermissionError:
+                if attempt == 2:
+                    raise
+                time.sleep(0.1)
 
 
 class TestGardenerCore(GardenerTempCase):
@@ -50,6 +64,40 @@ class TestGardenerCore(GardenerTempCase):
         done = self.af.task_done("steuer-2026")
         self.assertIsNotNone(done)
         self.assertEqual(done["meta"]["status"], "done")
+
+    def test_seeded_german_user_texts_use_real_umlauts(self):
+        import seed
+
+        seed = importlib.reload(seed)
+        with contextlib.redirect_stdout(io.StringIO()):
+            seed.seed()
+
+        combined = []
+        for db_name in ("gardener.db", "user.db"):
+            db_path = Path(os.environ["GARDENER_DATA"]) / db_name
+            with sqlite3.connect(db_path) as conn:
+                rows = conn.execute("SELECT content FROM everything").fetchall()
+            combined.extend(row[0] for row in rows)
+
+        text = re.sub(r"```.*?```", "", "\n".join(combined), flags=re.DOTALL)
+        legacy_spellings = [
+            "fuer",
+            "Fuer",
+            "Fuehrt",
+            "zurueck",
+            "Buecher",
+            "primaere",
+            "Grosse",
+            "ueber",
+            "nuetzlich",
+            "Uebersicht",
+            "Groessen",
+            "Bruecke",
+            "draussen",
+            "ausfuehren",
+        ]
+        for spelling in legacy_spellings:
+            self.assertNotIn(spelling, text)
 
 
 class TestCliI18n(unittest.TestCase):

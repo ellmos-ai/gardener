@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Gardener Seed -- Initiales Wissen fuer das System
+Gardener Seed -- Initiales Wissen für das System
 ==================================================
 
-Fuellt gardener.db mit Grundwissen, Beispiel-Tools und Regeln.
-Das sind die Buecher die schon im Haus stehen wenn das LLM einzieht.
+Füllt gardener.db mit Grundwissen, Beispiel-Tools und Regeln.
+Das sind die Bücher die schon im Haus stehen wenn das LLM einzieht.
 """
 from gardener import Gardener
 
@@ -20,10 +20,10 @@ def seed():
            content="""# Gardener Regeln
 
 ## Vier Funktionen
-- **find(query)** -- Durchsucht alles. Der primaere Zugang.
+- **find(query)** -- Durchsucht alles. Der primäre Zugang.
 - **get(name)** -- Holt einen einzelnen Eintrag.
 - **put(name, ...)** -- Schreibt oder aktualisiert.
-- **run(name, input)** -- Fuehrt Code aus.
+- **run(name, input)** -- Führt Code aus.
 
 ## Drei Beziehungen zu Dateien
 1. **Beobachten:** Datei liegt im Ordner, LLM sieht den Text (Blick aus dem Fenster)
@@ -37,7 +37,7 @@ def seed():
 ## Speicherorte
 - gardener.db: System-Wissen, Tools, Blaupausen (versionierbar)
 - user.db: User-Daten, Memory, Tasks, absorbierte Dateien
-- blobs/: Grosse Dateien auf der Halde (>50MB nur Index in DB)
+- blobs/: Große Dateien auf der Halde (>50MB nur Index in DB)
 """)
 
     af.put("gardener-api", type="knowledge", target="system", tags="system,api,referenz",
@@ -60,7 +60,7 @@ entry = af.get("beleg-scanner")
 af.put("notiz", content="Wichtig!", type="memory", tags="todo")
 af.put("mein-tool", content="...", type="tool", target="system")
 
-# Ausfuehren
+# Ausführen
 ok, output = af.run("mein-tool", input={"key": "value"})
 
 # Transporter
@@ -92,7 +92,7 @@ python gardener.py status
 | Typ | Beschreibung | Ziel-DB |
 |-----|-------------|---------|
 | knowledge | Wissen, Doku, Regeln | gardener.db |
-| tool | Ausfuehrbarer Code | gardener.db |
+| tool | Ausführbarer Code | gardener.db |
 | memory | Erinnerungen, Notizen | user.db |
 | task | Aufgaben | user.db |
 | document | Absorbierte Dateien | user.db |
@@ -109,7 +109,7 @@ python gardener.py status
            tags="tool,datei,info,utility",
            content="""# Datei-Info
 
-Zeigt Informationen ueber eine Datei an.
+Zeigt Informationen über eine Datei an.
 
 ## Code
 
@@ -138,13 +138,13 @@ def execute(input):
            tags="tool,text,statistik,triage,vorschau",
            content="""# Text-Stats
 
-Schnelle Statistik ueber einen Text -- Vorschau/Triage BEVOR
-das LLM alles liest. Auch nuetzlich um dem Menschen eine
-strukturierte Uebersicht zu geben.
+Schnelle Statistik über einen Text -- Vorschau/Triage BEVOR
+das LLM alles liest. Auch nützlich um dem Menschen eine
+strukturierte Übersicht zu geben.
 
 Drei Zwecke:
 1. Triage: Lohnt es sich den ganzen Text zu absorbieren?
-2. Fuer den Menschen: Strukturierte Zusammenfassung
+2. Für den Menschen: Strukturierte Zusammenfassung
 3. Vorschau: Erste Zeilen ohne den ganzen Text zu laden
 
 ## Code
@@ -185,7 +185,7 @@ def execute(input):
            tags="tool,datei,ordner,scan",
            content="""# Ordner-Scanner
 
-Scannt einen Ordner und listet alle Dateien mit Groessen.
+Scannt einen Ordner und listet alle Dateien mit Größen.
 
 ## Code
 
@@ -218,15 +218,15 @@ def execute(input):
 """)
 
     # ------------------------------------------------------------------
-    # Bridge-Tools (brauchen Zugang nach draussen)
+    # Bridge-Tools (brauchen Zugang nach draußen)
     # ------------------------------------------------------------------
 
     af.put("shell", type="tool", target="system",
            tags="tool,shell,system,bridge",
            content="""# Shell
 
-Fuehrt einen Shell-Befehl aus und gibt das Ergebnis zurueck.
-Das ist die Bruecke nach draussen -- fuer alles was nicht Text ist.
+Führt einen Shell-Befehl aus und gibt das Ergebnis zurück.
+Das ist die Brücke nach draußen -- für alles was nicht Text ist.
 
 ## Code
 
@@ -256,8 +256,8 @@ def execute(input):
            tags="tool,http,web,netzwerk,bridge",
            content="""# HTTP Fetch
 
-Ruft eine URL ab und gibt den Inhalt zurueck.
-Bruecke ins Netzwerk.
+Ruft eine URL ab und gibt den Inhalt zurück.
+Brücke ins Netzwerk.
 
 ## Code
 
@@ -310,7 +310,7 @@ def execute(input):
     dest = backup_dir / f"user_{ts}.db"
     shutil.copy2(str(user_db), str(dest))
 
-    # Alte Backups aufraeumen (max 10 behalten)
+    # Alte Backups aufräumen (max 10 behalten)
     backups = sorted(backup_dir.glob("user_*.db"))
     for old in backups[:-10]:
         old.unlink()
@@ -385,10 +385,10 @@ Das LLM ist Text. Die DB ist Text. Alles im Haus ist Text.
 - Kontext herstellen (recall() + eigenes Denken)
 - Planen, Entscheiden, Reflektieren
 
-## Was ein Tool braucht (Bruecke nach draussen)
+## Was ein Tool braucht (Brücke nach draußen)
 
 - Dateien lesen/schreiben (Dateisystem)
-- Shell-Befehle ausfuehren (Prozesse)
+- Shell-Befehle ausführen (Prozesse)
 - URLs abrufen (Netzwerk)
 - OCR (Hardware/Library)
 - PDF generieren (externe Tools)
@@ -398,7 +398,7 @@ Das LLM ist Text. Die DB ist Text. Alles im Haus ist Text.
 Bevor ein neues Tool gebaut wird:
 1. Kann ich es als Text tun? → Dann kein Tool.
 2. Gibt es das in BACH? → Dann portieren/adaptieren.
-3. Muss es wirklich nach draussen? → Dann Bridge-Tool.
+3. Muss es wirklich nach draußen? → Dann Bridge-Tool.
 """)
 
     # ------------------------------------------------------------------
@@ -419,8 +419,8 @@ Gardener ist dein LLM-natives Betriebssystem.
     # Ergebnis
     status = af.status()
     print(f"Seed abgeschlossen:")
-    print(f"  System-DB: {status['system_entries']} Eintraege")
-    print(f"  User-DB:   {status['user_entries']} Eintraege")
+    print(f"  System-DB: {status['system_entries']} Einträge")
+    print(f"  User-DB:   {status['user_entries']} Einträge")
 
 
 if __name__ == "__main__":

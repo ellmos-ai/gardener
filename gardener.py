@@ -175,7 +175,7 @@ class Gardener:
 
     def find(self, query: str, type: Optional[str] = None,
              limit: int = 20) -> List[Dict]:
-        """Durchsucht beide Datenbanken. Der primaere Zugang zu allem.
+        """Durchsucht beide Datenbanken. Der primäre Zugang zu allem.
 
         Args:
             query: Suchbegriff (Volltextsuche)
@@ -294,7 +294,7 @@ class Gardener:
             target = "system" if type in ("knowledge", "tool") else "user"
 
         conn = self._conn(target)
-        db = "main"  # Immer in die primaere DB schreiben
+        db = "main"  # Immer in die primäre DB schreiben
 
         # Upsert
         existing = conn.execute(
@@ -344,7 +344,7 @@ class Gardener:
         # Code-Block aus Content extrahieren
         code = self._extract_code(entry["content"])
         if not code:
-            return False, f"Kein ausfuehrbarer Code-Block in '{name}' gefunden."
+            return False, f"Kein ausführbarer Code-Block in '{name}' gefunden."
 
         # Workspace materialisieren
         ws_dir = self.workspace_dir / name.replace("/", "_")
@@ -374,9 +374,9 @@ class Gardener:
             return True, output.strip()
 
         except subprocess.TimeoutExpired:
-            return False, f"Timeout: '{name}' hat laenger als 60s gedauert."
+            return False, f"Timeout: '{name}' hat länger als 60s gedauert."
         except Exception as e:
-            return False, f"Fehler bei Ausfuehrung von '{name}': {e}"
+            return False, f"Fehler bei Ausführung von '{name}': {e}"
 
     # ------------------------------------------------------------------
     # Erweiterte Operationen
@@ -386,7 +386,7 @@ class Gardener:
         """Absorbiert eine Datei in die DB (Transporter: Materialisiert → DB).
 
         Kleine Dateien: Inhalt direkt in DB.
-        Grosse Dateien: Index in DB + Datei auf Halde.
+        Große Dateien: Index in DB + Datei auf Halde.
         """
         file_path = Path(file_path)
         if not file_path.exists():

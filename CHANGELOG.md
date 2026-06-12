@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-12
+
+- Replaced romanized German umlaut spellings in seeded user-facing knowledge and bridge-tool descriptions with real umlauts.
+- Updated German runtime error messages for tool execution failures to use real umlauts.
+- Added a regression test that verifies seeded German texts no longer contain the old `ae`/`oe`/`ue` spellings.
+
 ## 2026-06-11
 
 - Added README and `llms.txt` discovery context for the canonical `ellmos-ai/gardener` repository path.

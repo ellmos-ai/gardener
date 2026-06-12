@@ -1,6 +1,6 @@
 # Gardener - Database-Based Operating System for LLMs
 
-Last-checked: 2026-06-11
+Last-checked: 2026-06-12
 Canonical repository: https://github.com/ellmos-ai/gardener
 
 > Gardener is a database-centric operating system for LLMs: everything -- knowledge, tools, memories, tasks -- lives in a single searchable SQLite database, exposed through four primitive operations (find, get, put, run). A minimalist counterpart to file-centric agent systems like BACH.
@@ -10,7 +10,8 @@ Where BACH treats the filesystem as the LLM's working environment, Gardener trea
 Core primitives: find (search across all entries), get (read entry by name), put (store knowledge, memory, tools, tasks), run (execute a tool with input), absorb (ingest files into DB), materialize (write DB content to workspace), observe (watch user folder for changes), sync, status. Data model: a single `everything` table typed as knowledge / tool / memory / task, split across `gardener.db` (system) and `user.db` (user data).
 
 Testing: run `python -m unittest discover -s tests -v`. CI uses the same
-stdlib test command on Python 3.10, 3.11, and 3.12.
+stdlib test command on Python 3.10, 3.11, and 3.12. Current local suite: 5
+unittest tests.
 
 ## Audience
 
