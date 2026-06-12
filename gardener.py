@@ -795,10 +795,12 @@ class Gardener:
         now = self._now()
         stats = {"decayed": 0, "forgotten": 0, "kept": 0}
 
-        # Alle Memory-artigen Einträge mit Gewicht
+        # Alle Memory-artigen Einträge mit Gewicht.
+        # Gepinnte Einträge sind von Decay und Forget ausgenommen.
         rows = conn.execute("""
             SELECT id, name, type, meta FROM main.everything
             WHERE type IN ('memory', 'lesson', 'session')
+              AND pinned = 0
         """).fetchall()
 
         for row in rows:

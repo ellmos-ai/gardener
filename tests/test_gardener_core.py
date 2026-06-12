@@ -65,6 +65,31 @@ class TestGardenerCore(GardenerTempCase):
         self.assertIsNotNone(done)
         self.assertEqual(done["meta"]["status"], "done")
 
+    def test_consolidate_never_touches_pinned_entries(self):
+        self.af.put(
+            "pinned-memo",
+            content="bleibt",
+            type="memory",
+            meta={"weight": 0.06, "decay_rate": 0.5},
+            pinned=True,
+        )
+        self.af.put(
+            "volatile-memo",
+            content="verblasst",
+            type="memory",
+            meta={"weight": 0.06, "decay_rate": 0.5},
+        )
+
+        # Several cycles: volatile entry drops below the forget threshold
+        for _ in range(3):
+            self.af.consolidate()
+
+        self.assertIsNone(self.af.get("volatile-memo"))
+        pinned = self.af.get("pinned-memo")
+        self.assertIsNotNone(pinned)
+        # Weight of pinned entries must remain untouched (no decay)
+        self.assertEqual(pinned["meta"]["weight"], 0.06)
+
     def test_find_orders_fts_hits_by_relevance(self):
         # Older but weaker match (single occurrence, long document)
         self.af.put(
