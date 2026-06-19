@@ -236,5 +236,49 @@ class TestCliI18n(unittest.TestCase):
         self.assertIn("Consolidate memory", output)
 
 
+class TestRepositoryHygiene(unittest.TestCase):
+    def test_gitignore_protects_runtime_and_secret_artifacts(self):
+        protected_paths = [
+            "gardener.db-wal",
+            "gardener.db-shm",
+            "user.sqlite3",
+            ".env",
+            ".env.local",
+            ".npmrc",
+            ".pypirc",
+            "credentials.json",
+            "token.json",
+            "secrets.json",
+            "deploy.pem",
+            "deploy.key",
+            "id_ed25519",
+            "npm_recovery_codes.txt",
+        ]
+
+        result = subprocess.run(
+            ["git", "check-ignore", "-v", *protected_paths],
+            cwd=ROOT,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        ignored = {
+            line.rsplit("\t", 1)[-1].replace("\\", "/")
+            for line in result.stdout.splitlines()
+            if "\t" in line
+        }
+        self.assertEqual(set(protected_paths), ignored)
+
+    def test_gitignore_keeps_env_examples_trackable(self):
+        for path in (".env.example", ".env.sample"):
+            result = subprocess.run(
+                ["git", "check-ignore", "--quiet", path],
+                cwd=ROOT,
+            )
+            self.assertEqual(result.returncode, 1, path)
+
+
 if __name__ == "__main__":
     unittest.main()
