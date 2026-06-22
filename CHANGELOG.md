@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-22
+
+- Hardened entry deserialization so invalid `meta` JSON is normalized to an empty object instead of leaking as a string and crashing `recall()` sorting.
+- Added a regression test for `recall()` on memory entries with invalid `meta` JSON.
+
 ## 2026-06-12
 
 - Removed the never-populated `blobs` table from the schema: blob metadata (`blob_path`, `blob_hash`, `size`, `mimetype`, `original_name`) deliberately lives in the entry's `meta` JSON, which is what `absorb()`/`materialize()` and the design docs already use. Deliberate decision, see DESIGN.md/KONZEPT.md.

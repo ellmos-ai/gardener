@@ -987,7 +987,7 @@ class Gardener:
             try:
                 d["meta"] = json.loads(d["meta"])
             except (json.JSONDecodeError, TypeError):
-                pass
+                d["meta"] = {}
         return d
 
     def _extract_code(self, content: str) -> Optional[str]:

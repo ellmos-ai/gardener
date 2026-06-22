@@ -133,6 +133,35 @@ class TestGardenerCore(GardenerTempCase):
         names = [r["name"] for r in self.af.find("zebra")]
         self.assertEqual(names[0], "zebra-weak")
 
+    def test_recall_tolerates_invalid_meta_json(self):
+        conn = sqlite3.connect(Path(os.environ["GARDENER_DATA"]) / "user.db")
+        try:
+            conn.execute(
+                """
+                INSERT INTO everything
+                    (name, content, type, tags, meta, pinned, created, updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "broken-meta-memory",
+                    "needle memory content",
+                    "memory",
+                    "",
+                    "{broken",
+                    0,
+                    "2026-06-22T00:00:00",
+                    "2026-06-22T00:00:00",
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        results = self.af.recall("needle")
+
+        self.assertEqual(results[0]["name"], "broken-meta-memory")
+        self.assertEqual(results[0]["meta"], {})
+
     def test_tasks_sorted_by_semantic_priority(self):
         self.af.task("t-low", "x", priority="low")
         self.af.task("t-critical", "x", priority="critical")
