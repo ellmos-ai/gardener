@@ -51,6 +51,8 @@ BLOB_THRESHOLD_WARN   = 50_000_000     # < 50MB: BLOB in DB mit Warnung
 
 # Internal runtime directories that observe()/sync() must never index
 INTERNAL_SKIP_PREFIXES = (".absorber", ".output", ".gardener", "__pycache__")
+# Internal top-level files that observe()/sync() must never index or absorb
+INTERNAL_SKIP_FILES = ("config.json",)
 
 
 # ---------------------------------------------------------------------------
@@ -390,8 +392,9 @@ class Gardener:
         Große Dateien: Index in DB + Datei auf Halde.
         """
         file_path = Path(file_path)
-        if not file_path.exists():
-            raise FileNotFoundError(f"Datei nicht gefunden: {file_path}")
+        if not file_path.is_file():
+            raise FileNotFoundError(
+                f"Keine reguläre Datei (fehlt oder ist ein Ordner): {file_path}")
 
         size = file_path.stat().st_size
         name = file_path.name
@@ -473,14 +476,16 @@ class Gardener:
         # Blob von Halde?
         blob_path = meta.get("blob_path")
         if blob_path and Path(blob_path).exists():
-            original_name = meta.get("original_name", name)
+            original_name = self._safe_filename(
+                meta.get("original_name") or name, "blob.bin")
             out_path = dest / original_name
             shutil.copy2(blob_path, str(out_path))
             return out_path
 
         # Text-Content als Datei schreiben
         suffix = meta.get("format", "md")
-        filename = meta.get("filename", f"{name}.{suffix}")
+        filename = self._safe_filename(
+            meta.get("filename") or f"{name}.{suffix}", f"export.{suffix}")
         out_path = dest / filename
         out_path.write_text(entry["content"], encoding="utf-8")
         return out_path
@@ -504,7 +509,9 @@ class Gardener:
             if self._is_internal(str(rel)):
                 continue
 
-            name = f"observed/{rel}"
+            # as_posix(): plattformstabile Entry-Namen (Windows-Backslashes
+            # würden bei Cross-System-Sync Duplikate statt Updates erzeugen)
+            name = f"observed/{rel.as_posix()}"
             content = ""
 
             # Text extrahieren wenn moeglich
@@ -568,8 +575,8 @@ class Gardener:
                 continue
 
             # Interne Ordner überspringen
-            rel = str(file_path.relative_to(self.home))
-            if self._is_internal(rel):
+            rel = file_path.relative_to(self.home)
+            if self._is_internal(str(rel)):
                 continue
 
             if mode == "always_absorb":
@@ -581,7 +588,7 @@ class Gardener:
                     pass
             else:
                 # Beobachten (nur Text extrahieren, Datei nicht anfassen)
-                name = f"observed/{rel}"
+                name = f"observed/{rel.as_posix()}"
                 content = ""
 
                 if file_path.suffix.lower() in ('.txt', '.md', '.py', '.json', '.csv',
@@ -973,11 +980,31 @@ class Gardener:
 
     @staticmethod
     def _is_internal(rel: str) -> bool:
-        """True if a path relative to home points into an internal runtime dir.
+        """True if a path relative to home points into an internal runtime dir
+        or is an internal top-level file (config.json).
 
-        Shared skip logic for observe() and sync().
+        Shared skip logic for observe() and sync(). Compares whole path
+        segments, not string prefixes — sibling names like
+        '.absorber-notes.txt' are NOT skipped.
         """
-        return rel.startswith(INTERNAL_SKIP_PREFIXES)
+        parts = str(rel).replace("\\", "/").split("/")
+        if any(p in INTERNAL_SKIP_PREFIXES for p in parts):
+            return True
+        return len(parts) == 1 and parts[0] in INTERNAL_SKIP_FILES
+
+    @staticmethod
+    def _safe_filename(raw, fallback: str) -> str:
+        """Reduziert einen Dateinamen aus meta-Daten auf seinen Basisnamen.
+
+        meta-JSON ist über put() frei setzbar und damit nicht vertrauenswürdig:
+        absolute Pfade, '..' und Laufwerksangaben würden materialize() sonst
+        außerhalb des Zielordners schreiben lassen (Path Traversal).
+        """
+        name = str(raw).replace("\\", "/").rsplit("/", 1)[-1]
+        name = name.rsplit(":", 1)[-1].strip()
+        if name in ("", ".", ".."):
+            return fallback
+        return name
 
     def _row_to_dict(self, row: sqlite3.Row) -> Dict:
         """Konvertiert eine DB-Row in ein Dict."""

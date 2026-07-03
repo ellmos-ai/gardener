@@ -309,5 +309,66 @@ class TestRepositoryHygiene(unittest.TestCase):
             self.assertEqual(result.returncode, 1, path)
 
 
+class TestGardenerHardening(GardenerTempCase):
+    def test_materialize_sanitizes_traversal_filename(self):
+        self.af.put(
+            "evil-entry",
+            content="harmlos",
+            type="document",
+            meta={"filename": "../../../evil.txt"},
+        )
+        dest = Path(self.temp.name) / "safe-dest"
+        out_path = self.af.materialize("evil-entry", dest=dest)
+        self.assertEqual(out_path.parent, dest)
+        self.assertEqual(out_path.name, "evil.txt")
+        self.assertFalse((Path(self.temp.name) / "evil.txt").exists())
+
+    def test_materialize_sanitizes_absolute_filename(self):
+        target = Path(self.temp.name) / "outside.txt"
+        self.af.put(
+            "evil-abs",
+            content="harmlos",
+            type="document",
+            meta={"filename": str(target)},
+        )
+        dest = Path(self.temp.name) / "safe-dest"
+        out_path = self.af.materialize("evil-abs", dest=dest)
+        self.assertEqual(out_path.parent, dest)
+        self.assertFalse(target.exists())
+
+    def test_absorb_directory_raises_clean_error(self):
+        folder = Path(self.temp.name) / "ein-ordner"
+        folder.mkdir()
+        with self.assertRaises(FileNotFoundError):
+            self.af.absorb(folder)
+
+    def test_sync_always_absorb_preserves_config_json(self):
+        home = Path(os.environ["GARDENER_HOME"])
+        (home / "notiz.txt").write_text("inhalt", encoding="utf-8")
+        self.af.config["mode"] = "always_absorb"
+        self.af.sync()
+        self.assertTrue((home / "config.json").exists())
+        self.assertFalse((home / "notiz.txt").exists())
+
+    def test_is_internal_matches_segments_not_prefixes(self):
+        is_internal = self.gardener.Gardener._is_internal
+        self.assertTrue(is_internal(".absorber/x.txt"))
+        self.assertTrue(is_internal("sub/__pycache__/x.pyc"))
+        self.assertTrue(is_internal("config.json"))
+        self.assertFalse(is_internal(".absorber-notes.txt"))
+        self.assertFalse(is_internal(".outputs/x.txt"))
+        self.assertFalse(is_internal("sub/config.json"))
+
+    def test_observe_names_use_posix_separators(self):
+        home = Path(os.environ["GARDENER_HOME"])
+        nested = home / "unterordner"
+        nested.mkdir(parents=True, exist_ok=True)
+        (nested / "datei.txt").write_text("inhalt", encoding="utf-8")
+        observed = self.af.observe()
+        names = [o["name"] for o in observed]
+        self.assertIn("observed/unterordner/datei.txt", names)
+        self.assertFalse(any("\\" in n for n in names))
+
+
 if __name__ == "__main__":
     unittest.main()

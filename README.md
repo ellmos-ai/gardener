@@ -208,6 +208,24 @@ The vision: The LLM serves itself from a library of modules.
 Gardener provides search, memory, and the execution environment —
 everything else is added as a plugin when needed.
 
+## Security Model (Read This)
+
+Gardener is a **local, single-user tool with no sandbox — by design**. Be
+aware of what that means before feeding it untrusted content:
+
+- `run(name)` executes the Python code stored in an entry's content **with
+  the full permissions of your user account**. There is no isolation, no
+  restricted builtins, no network or filesystem limits.
+- The seeded `shell` tool executes arbitrary shell commands
+  (`subprocess.run(..., shell=True)`).
+- Anything that can call `put()` can therefore achieve code execution via
+  `run()`. If you expose Gardener through another layer (e.g. an MCP server
+  or a chat agent), that layer inherits this power — add your own
+  authorization there.
+
+**Rule of thumb:** only absorb, put, and run content you trust as much as
+code you would execute yourself.
+
 ## Design Document
 
 Detailed design documentation: [KONZEPT.md](KONZEPT.md) (German)
