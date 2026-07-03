@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-03
+
+- CLI: `stdout`/`stderr` are reconfigured to UTF-8 with replacement errors in `main()`, so umlauts no longer crash on Windows consoles without `PYTHONIOENCODING=utf-8`.
+- CLI: `gardener absorb <path>` prints a clean error message for missing or unreadable files instead of an unhandled traceback.
+- CLI: renamed the task loop variable that shadowed the i18n translation function `t`.
+
 ## 2026-06-22
 
 - Hardened entry deserialization so invalid `meta` JSON is normalized to an empty object instead of leaking as a string and crashing `recall()` sorting.

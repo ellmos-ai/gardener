@@ -43,3 +43,6 @@ id_ed25519
 *recovery_codes*.txt
 *BRIEFING*
 CORE.txt
+
+# Interne Multi-Agenten-Koordination (LOCK-System)
+LOCK*.txt

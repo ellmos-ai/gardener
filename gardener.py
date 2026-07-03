@@ -1050,6 +1050,9 @@ if 'execute' in dir():
 def main():
     """Minimales CLI für Gardener."""
     from i18n import t
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     af = Gardener()
 
     if len(sys.argv) < 2:
@@ -1126,7 +1129,11 @@ def main():
 
     elif cmd == "absorb":
         path = sys.argv[2] if len(sys.argv) > 2 else ""
-        entry = af.absorb(path)
+        try:
+            entry = af.absorb(path)
+        except (FileNotFoundError, IsADirectoryError, PermissionError) as e:
+            print(f"  [FEHLER] Datei nicht lesbar: {path} ({e.__class__.__name__})")
+            return
         print(f"  [OK] {entry['name']} absorbiert ({entry['meta'].get('storage', '?')})")
 
     elif cmd == "materialize":
@@ -1206,13 +1213,13 @@ def main():
         tasks = af.tasks(status_filter)
         if not tasks:
             print("  Keine Tasks.")
-        for t in tasks:
-            m = t.get("meta", {})
+        for tk in tasks:
+            m = tk.get("meta", {})
             st = m.get("status", "?")
             pr = m.get("priority", "normal")
             due = m.get("due", "")
             marker = "[x]" if st == "done" else "[ ]"
-            print(f"  {marker} {t['name']:30s} ({pr}) {due}")
+            print(f"  {marker} {tk['name']:30s} ({pr}) {due}")
 
     elif cmd == "task":
         name = sys.argv[2] if len(sys.argv) > 2 else "unnamed"
