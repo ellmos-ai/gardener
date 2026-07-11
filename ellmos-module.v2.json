@@ -1,0 +1,45 @@
+{
+  "schema": "ellmos.module.v2",
+  "id": "GARDENER",
+  "display_name": "GARDENER",
+  "category": "memory",
+  "kind": "service",
+  "status": "active",
+  "visibility": "public-candidate",
+  "provides": [
+    "memory.organic",
+    "knowledge.index",
+    "knowledge.search"
+  ],
+  "requires": [],
+  "optional": [],
+  "conflicts": [],
+  "surfaces": [
+    "library",
+    "cli",
+    "service"
+  ],
+  "profiles": [
+    "memory",
+    "index-only"
+  ],
+  "state": {
+    "ownership": "module",
+    "location": "user-home"
+  },
+  "boundaries": {
+    "network": "local",
+    "data": "user-local",
+    "platforms": [
+      "windows",
+      "macos",
+      "linux"
+    ]
+  },
+  "source_of_truth": {
+    "type": "local-directory",
+    "path": ".",
+    "repository": null
+  },
+  "adapters": []
+}
