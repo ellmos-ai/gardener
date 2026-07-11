@@ -4,6 +4,7 @@ import gc
 import io
 import os
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -263,6 +264,35 @@ class TestCliI18n(unittest.TestCase):
         self.assertIn("Gardener -- LLM-native operating system", output)
         self.assertIn("Commands:", output)
         self.assertIn("Consolidate memory", output)
+
+    def test_help_falls_back_when_translations_file_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app_dir = Path(tmp) / "app"
+            app_dir.mkdir()
+            shutil.copy2(ROOT / "gardener.py", app_dir / "gardener.py")
+            shutil.copy2(ROOT / "i18n.py", app_dir / "i18n.py")
+
+            for lang, expected in (
+                ("de", "Gedächtnis konsolidieren"),
+                ("en", "Consolidate memory"),
+            ):
+                env = os.environ.copy()
+                env["PYTHONIOENCODING"] = "utf-8"
+                env["GARDENER_DATA"] = str(Path(tmp) / f"data-{lang}")
+                env["GARDENER_HOME"] = str(Path(tmp) / f"home-{lang}")
+                env["GARDENER_LANG"] = lang
+                result = subprocess.run(
+                    [sys.executable, str(app_dir / "gardener.py")],
+                    cwd=app_dir,
+                    env=env,
+                    text=True,
+                    encoding="utf-8",
+                    capture_output=True,
+                    check=True,
+                )
+                self.assertIn(expected, result.stdout)
+                self.assertNotIn("cmd.consolidate", result.stdout)
+                self.assertNotIn("help.title", result.stdout)
 
 
 class TestRepositoryHygiene(unittest.TestCase):

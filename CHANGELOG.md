@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-11
+
+- Release hygiene: `i18n.py` now carries built-in German/English CLI help fallbacks, so non-editable installs that miss `locales/translations.json` still show readable help text instead of raw translation keys.
+- Added a regression test that runs `gardener.py` from a wheel-like copy without the `locales/` directory.
+
 ## 2026-07-03
 
 - **Security:** `materialize()` sanitizes `filename`/`original_name` from entry meta to their base name. Previously, meta set via `put()` could contain `..` or absolute paths and make `materialize()` write outside the destination directory (path traversal).
