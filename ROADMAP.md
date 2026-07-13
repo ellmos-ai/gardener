@@ -90,3 +90,73 @@ and letting the worse be forgotten.
 | 2026-03-12 | DB viewer from BACH | Don't rebuild, port |
 | 2026-03-12 | Sketchboard model | LLM IS the house (context), DB is photo album (memory) |
 | 2026-03-12 | Decay for everything (planned) | Tools/knowledge should also age |
+
+
+---
+
+## Cross-Source federated index (v0.3+) — 2026-07-06
+
+Gardener wird der **Sucheinstieg über verteiltes Wissen**, nicht nur über die
+eigene DB. Ausgangslage: Rinnsal und BACH haben **kein** FTS, Gardener hat es
+bereits — und Gardeners `observe()` ist konzeptionell schon der richtige,
+**föderierte** Mechanismus („beobachten statt besitzen", read-only).
+
+- [ ] `observe()` von Dateien auf **fremde Wissensquellen** erweitern:
+  read-only-Adapter über die `rinnsal`-DB (`usmc_*`), `bach.db` und optional
+  Agent-Transkripte (Codex/Claude/…). Quellen bleiben **wo sie sind**; Gardener
+  indexiert nur — **kein `absorb`/Reinkopieren**, v.a. keine GB-großen
+  Transkripte ins Haus holen.
+- [ ] Treffer zitieren zurück zur Quelle (wie ctx: Ergebnis → Quell-DB/Datei/ID).
+- [ ] Föderierte FTS-Suche über eigene + beobachtete Quellen in einem Query.
+- [ ] Quellenliste erweitert [U 2026-07-11]: zusätzlich **Claude-Memories**
+  (`~/.claude/projects/*/memory/`) und **`.remember`-Dateien** als
+  observe-Quellen. Transkript-Adapter NICHT neu bauen: die fertigen
+  **`_TOM-lm`-Adapter** (`_control-center/_TOM-lm/_tool/adapters/` —
+  Claude/Codex/Gemini/Kimi) als Basis der observe()-Adapter verwenden.
+
+Abgrenzung: `absorb` = ins Haus holen (klein/kuratiert) vs. `observe`-Index =
+föderiert (fremd/groß, read-only). Vorbild `ctx` (ctxrs, **Apache-2.0**,
+pull/passiv) — deckt aber nur Coding-Agent-Transkripte ab, nicht unsere DBs;
+Eigenbau via Gardener bevorzugt. Hintergrund/Recherche:
+`.AI/.MODULES/knowledge-index/KONZEPT.md`.
+
+
+## Gardener als Memory-Modul + lawn-mower-Stack (2026-07-06)
+
+Richtungsentscheidung mit User: Gardener wird primär als **Memory-Modul**
+verstanden (Kategorie `.MEMORY` in `.MODULES`) — funktioniert zugleich als
+absolut minimales OS.
+
+- **lawn-mower (geplant):** ein **Stack**, der Gardener (organisch/emergent,
+  absorb/observe/decay) + USMC (strukturiert/kuratiert, facts/lessons) kombiniert
+  und das **Standard-Memory** wird.
+- **BACH-Transfer (Roadmap):** BACH hat evtl. schönere/bessere Memory-Funktionen
+  → diese nach **USMC** transferieren; BACH **reimportiert** später `lawn-mower`
+  als sein Gedächtnis (nutzt dann den Standard-Memory-Stack statt Eigenbau).
+- **Task-Faktenlage:** USMC = reines Memory (keine Tasks); Tasks liegen in
+  Rinnsal (`rinnsal_tasks`); Gardener vermischt Tasks+Memory bewusst
+  (`type='task'`). Offene Designfrage für den Memory-Stack.
+- Physische Umordnung (`.MODULES/.MEMORY/gardener`) erst später/manuell — dann
+  homebase-Engine-Pfad (`[engines.garden].path`) nachziehen.
+
+### Update 2026-07-11 — .MEMORY-Säule, Gardener als Zulieferer [U 2026-07-11]
+
+- Zielort ist jetzt eine **eigene Säule `.AI/.MEMORY/`** (statt `.MODULES/.MEMORY`);
+  Gardener zieht aus `.OS` dorthin um.
+- Rollenklärung: **USMC** (rehabilitiert, Deprecation aufgehoben) = kuratiertes
+  Session-Memory + **Fassade/Einstiegspunkt** des Memory-Systems; **Gardener** =
+  Memory-**Zulieferer** (Wildwuchs + Cross-Source-Index); **TASKPLAN** = Task-System
+  als drittes Modul (extrahiert aus `rinnsal/tasks`).
+- Das beantwortet die offene Task-Designfrage: Tasks wandern zu **TASKPLAN**;
+  Gardeners `type='task'` bleibt nur organisches Beobachtungsgut, kein Task-System.
+- lawn-mower als eigener Stack entfällt — geht in `.MEMORY` (USMC+GARDENER+TASKPLAN) auf.
+- Physische Umordnung weiterhin später/manuell (siehe `.AI/.MEMORY/README.md`,
+  Migrationsstand) — dann homebase-Engine-Pfad nachziehen.
+
+### Folgeupdate 2026-07-11 — Baukasten-Rückführung [U 2026-07-11]
+
+- Die funktionale `.MEMORY`-Kapselung bleibt erhalten, ist nun aber die
+  Fähigkeitsfamilie `.AI/.MODULES/.MEMORY/` statt einer eigenen Root-Säule.
+- GARDENER, USMC und TASKPLAN wurden nach katalog-first Vorbereitung physisch
+  dorthin zurückgeführt. Homebase löst GARDENER zuerst über die Modul-ID auf und
+  behält die beiden früheren Orte nur als Kompatibilitätsfallback.
