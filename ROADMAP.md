@@ -101,18 +101,36 @@ eigene DB. Ausgangslage: Rinnsal und BACH haben **kein** FTS, Gardener hat es
 bereits — und Gardeners `observe()` ist konzeptionell schon der richtige,
 **föderierte** Mechanismus („beobachten statt besitzen", read-only).
 
-- [ ] `observe()` von Dateien auf **fremde Wissensquellen** erweitern:
-  read-only-Adapter über die `rinnsal`-DB (`usmc_*`), `bach.db` und optional
-  Agent-Transkripte (Codex/Claude/…). Quellen bleiben **wo sie sind**; Gardener
-  indexiert nur — **kein `absorb`/Reinkopieren**, v.a. keine GB-großen
-  Transkripte ins Haus holen.
-- [ ] Treffer zitieren zurück zur Quelle (wie ctx: Ergebnis → Quell-DB/Datei/ID).
-- [ ] Föderierte FTS-Suche über eigene + beobachtete Quellen in einem Query.
-- [ ] Quellenliste erweitert [U 2026-07-11]: zusätzlich **Claude-Memories**
-  (`~/.claude/projects/*/memory/`) und **`.remember`-Dateien** als
-  observe-Quellen. Transkript-Adapter NICHT neu bauen: die fertigen
-  **`_TOM-lm`-Adapter** (`_control-center/_TOM-lm/_tool/adapters/` —
-  Claude/Codex/Gemini/Kimi) als Basis der observe()-Adapter verwenden.
+**Status 2026-07-23: erste Ausbaustufe umgesetzt** (`sources.py`,
+`Gardener.observe_source_*`/`observe_sources()`, CLI `gardener observe-source
+add/list/remove/refresh`, 15 Tests). Details: README.md/README_de.md
+Abschnitt "Cross-Source Federated Index", CHANGELOG.md 2026-07-23.
+
+- [x] `observe()` auf **fremde Wissensquellen** erweitert: vier read-only-
+  Adapter (`markdown_dir`, `remember_files`, `sqlite_table`,
+  `agent_transcripts`). `sqlite_table` ist generisch (Pfad+Tabelle+Spalten-
+  Mapping aus config.json) und deckt damit `rinnsal`-artige/`bach.db`-artige
+  Tabellen ab, ohne deren Schema fest zu verdrahten. Quellen bleiben **wo sie
+  sind** (SQLite strikt `mode=ro` geöffnet); Gardener indexiert nur — **kein
+  `absorb`/Reinkopieren**. `agent_transcripts` liest GB-große JSONL-
+  Transkripte inkrementell ab gespeichertem Byte-Offset (kein Re-Read bei
+  unveränderten Dateien). **Offen:** eigene `format`-Presets für
+  Codex-/Gemini-/Kimi-Transkriptformate (bislang: eingebautes `claude_code`-
+  Mapping + generisches Dotted-Path-Role/Text-Mapping für alles andere).
+- [x] Treffer zitieren zurück zur Quelle: jeder observed-Eintrag trägt
+  `meta.source_ref` (Datei-/DB-Pfad, Tabelle+Zeile, oder Transkript-Zeile+uuid).
+- [x] Föderierte FTS-Suche über eigene + beobachtete Quellen in einem Query:
+  `find()` durchsuchte bereits `gardener.db`+`user.db` gemeinsam; Cross-
+  Source-Einträge landen wie normale `observed`-Einträge in `user.db` und
+  erscheinen damit automatisch mit.
+- [x] Quellenliste erweitert [U 2026-07-11]: **Claude-Memories**
+  (`markdown_dir`, deckt `~/.claude/projects/*/memory/` konfigurierbar ab)
+  und **`.remember`-Dateien** (`remember_files`) sind eigene Adapter. Die
+  **`_TOM-lm`-Adapter** (`_control-center/_TOM-lm/_tool/adapters/`) wurden als
+  Vorlage gelesen (Extraktionslogik für Claude Code JSONL verstanden), aber
+  bewusst NICHT übernommen — public Repo, keine privaten Pfade/Inhalte; der
+  `agent_transcripts`-Adapter ist eine eigenständige, generische
+  Neu-Implementierung.
 
 Abgrenzung: `absorb` = ins Haus holen (klein/kuratiert) vs. `observe`-Index =
 föderiert (fremd/groß, read-only). Vorbild `ctx` (ctxrs, **Apache-2.0**,

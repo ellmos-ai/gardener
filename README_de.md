@@ -54,6 +54,10 @@ python gardener.py absorb <datei>
 python gardener.py materialize <name>
 python gardener.py sync
 python gardener.py observe
+python gardener.py observe-source add <id> <kind> [key=value ...]
+python gardener.py observe-source list
+python gardener.py observe-source remove <id>
+python gardener.py observe-source refresh [id]
 python gardener.py status
 ```
 
@@ -155,6 +159,60 @@ Details: [KONZEPT.md#tasks](KONZEPT.md#tasks-kein-separates-system-design-entsch
 af.absorb("/pfad/zur/datei.pdf")   # Datei → DB (dematerialisieren)
 af.materialize("datei.pdf")         # DB → Datei (rematerialisieren)
 ```
+
+## Cross-Source Federated Index
+
+`observe()` beobachtet Gardeners eigenen Home-Ordner. **Observe-Sources**
+erweitern dasselbe rein lesende Prinzip auf Wissen, das in *anderen*
+Werkzeugen lebt: Originale werden nie angefasst, verschoben oder
+hineinkopiert — nur ihr Text wird in Gardeners FTS-Index aufgenommen, und
+jeder indexierte Eintrag trägt einen `source_ref` im `meta`-Feld, damit
+sich ein Suchtreffer immer bis zur Quelle zurückverfolgen lässt (Dateipfad,
+DB-Tabelle+Zeile, oder Transkript-Zeile). `find()` durchsucht bereits
+`gardener.db` + `user.db` in einer Anfrage — beobachtete Cross-Source-
+Treffer erscheinen also direkt neben den eigenen Einträgen, ohne
+gesonderten Suchaufruf.
+
+Vier Quellenarten:
+
+| Art | Was indexiert wird | Wichtige Config |
+|---|---|---|
+| `markdown_dir` | Ein Verzeichnis mit Markdown-Dateien, ein Eintrag pro Datei. `path` darf selbst ein Glob sein, das mehrere Verzeichnisse abdeckt (z. B. eine Pro-Projekt-Memory-Konvention). | `path`, `glob` (Default `*.md`) |
+| `remember_files` | Kleine Notiz-Dateien irgendwo unterhalb einer Wurzel, gefunden über rekursives Glob. | `path`, `glob` (Default `**/.remember`) |
+| `sqlite_table` | Eine einzelne Tabelle in einer fremden SQLite-Datenbank, streng lesend geöffnet (`mode=ro`). Spaltennamen werden vor Nutzung gegen das echte Schema geprüft (Whitelist). | `db_path`, `table`, `columns` (`content` Pflicht; `id`/`name`/`tags` optional) |
+| `agent_transcripts` | JSONL-Chat-Transkripte, zeilenweise indexiert, **nur Text-Turns** (Tool-Aufrufe/-Ergebnisse und interne „Thinking"-Blöcke werden übersprungen). Bringt ein eingebautes Feld-Mapping für Claude Codes eigenes Transkriptformat mit; jedes andere zeilenbasierte JSON-Transkript lässt sich über ein generisches Dotted-Path-Role/Text-Mapping indexieren. Große, wachsende Dateien werden ab einem gespeicherten Byte-Offset weitergelesen — ein Refresh liest nie erneut, was schon indexiert wurde. | `path` (Glob, `**` rekursiv), `format` (`claude_code` Default, oder `generic` mit `role_field`/`text_field`) |
+
+```bash
+# Claude-Code-Projekt-Memories dieses Rechners indexieren
+gardener observe-source add claude-memories markdown_dir path="~/.claude/projects/*/memory"
+
+# .remember-Notizen irgendwo unterhalb einer Wurzel indexieren
+gardener observe-source add notes remember_files path="~/notes"
+
+# Eine Tabelle in einer fremden, lesend geoeffneten SQLite-DB indexieren
+gardener observe-source add tasks-db sqlite_table db_path="~/.some-tool/tool.db" table=tasks
+
+# Claude-Code-Transkripte indexieren (Hauptgespraech, nur Text-Turns)
+gardener observe-source add claude-transcripts agent_transcripts path="~/.claude/projects/*/**/*.jsonl"
+
+gardener observe-source list
+gardener observe-source refresh              # alle Quellen
+gardener observe-source refresh claude-memories
+gardener observe-source remove claude-memories
+```
+
+```python
+af.observe_source_add("claude-memories", "markdown_dir",
+                       path="~/.claude/projects/*/memory")
+af.observe_sources()                          # alle konfigurierten Quellen aktualisieren
+af.find("steuer")                              # eigene Eintraege + beobachtete Treffer, eine Anfrage
+```
+
+Das `columns`-Mapping des `sqlite_table`-Adapters erlaubt es, auf jede
+fremde Tabelle zu zeigen, ohne dass Gardener ihr Schema vorher kennt —
+z. B. eine Task- oder Notiz-Tabelle eines anderen lokalen Werkzeugs. Die
+Konfiguration liegt in `config.json` unter `observe_sources`; nichts hier
+ist auf eine konkrete Maschine oder ein konkretes Werkzeug festverdrahtet.
 
 ## Seeding
 

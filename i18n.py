@@ -45,6 +45,22 @@ _BUILTIN_TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "de": "Ordner scannen (nur beobachten)",
         "en": "Scan folders (observe only)",
     },
+    "cmd.observe_source_add": {
+        "de": "Cross-Source-Quelle registrieren",
+        "en": "Register a cross-source knowledge source",
+    },
+    "cmd.observe_source_list": {
+        "de": "Cross-Source-Quellen auflisten",
+        "en": "List cross-source knowledge sources",
+    },
+    "cmd.observe_source_remove": {
+        "de": "Cross-Source-Quelle entfernen",
+        "en": "Remove a cross-source knowledge source",
+    },
+    "cmd.observe_source_refresh": {
+        "de": "Cross-Source-Quellen neu indexieren",
+        "en": "Re-index cross-source knowledge sources",
+    },
     "cmd.memo": {
         "de": "Notiz ins Arbeitsgedächtnis",
         "en": "Store note in working memory",

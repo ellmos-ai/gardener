@@ -141,6 +141,38 @@
     "ja": "",
     "ru": ""
   },
+  "cmd.observe_source_add": {
+    "de": "Cross-Source-Quelle registrieren",
+    "en": "Register a cross-source knowledge source",
+    "es": "",
+    "zh": "",
+    "ja": "",
+    "ru": ""
+  },
+  "cmd.observe_source_list": {
+    "de": "Cross-Source-Quellen auflisten",
+    "en": "List cross-source knowledge sources",
+    "es": "",
+    "zh": "",
+    "ja": "",
+    "ru": ""
+  },
+  "cmd.observe_source_remove": {
+    "de": "Cross-Source-Quelle entfernen",
+    "en": "Remove a cross-source knowledge source",
+    "es": "",
+    "zh": "",
+    "ja": "",
+    "ru": ""
+  },
+  "cmd.observe_source_refresh": {
+    "de": "Cross-Source-Quellen neu indexieren",
+    "en": "Re-index cross-source knowledge sources",
+    "es": "",
+    "zh": "",
+    "ja": "",
+    "ru": ""
+  },
   "cmd.memo": {
     "de": "Notiz ins Arbeitsgedächtnis",
     "en": "Store note in working memory",

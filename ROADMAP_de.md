@@ -90,3 +90,31 @@ und das Schlechtere vergessen lassen.
 | 2026-03-12 | DB-Viewer aus BACH | Nicht neu bauen, portieren |
 | 2026-03-12 | Sketchboard-Modell | LLM IST das Haus (Kontext), DB ist Fotoalbum (Gedächtnis) |
 | 2026-03-12 | Decay für alles (geplant) | Tools/Knowledge sollen auch altern können |
+
+---
+
+## Cross-Source federated index (v0.3+) — 2026-07-06
+
+Gardener wird der **Sucheinstieg über verteiltes Wissen**, nicht nur über die
+eigene DB. `observe()` ist konzeptionell schon der richtige, **föderierte**
+Mechanismus („beobachten statt besitzen", read-only).
+
+**Status 2026-07-23: erste Ausbaustufe umgesetzt** (`sources.py`,
+`Gardener.observe_source_*`/`observe_sources()`, CLI `gardener observe-source
+add/list/remove/refresh`, 15 Tests). Details: README_de.md Abschnitt
+"Cross-Source Federated Index", CHANGELOG.md 2026-07-23.
+
+- [x] Vier read-only-Adapter: `markdown_dir`, `remember_files`,
+  `sqlite_table` (generisch: Pfad+Tabelle+Spalten-Mapping aus config.json,
+  deckt rinnsal-/bach.db-artige Tabellen ab ohne deren Schema fest zu
+  verdrahten), `agent_transcripts` (JSONL, inkrementell ab gespeichertem
+  Byte-Offset, kein GB-Reread). Offen: eigene `format`-Presets für
+  Codex-/Gemini-/Kimi-Transkriptformate (bislang `claude_code` + generisches
+  Role/Text-Mapping).
+- [x] Treffer zitieren zurück zur Quelle via `meta.source_ref`.
+- [x] Föderierte FTS-Suche über eigene + beobachtete Quellen in einem Query
+  (bestehendes `find()` durchsuchte bereits beide DBs gemeinsam).
+- [x] Claude-Memories (`markdown_dir`) und `.remember`-Dateien
+  (`remember_files`) als eigene Adapter. Die `_TOM-lm`-Adapter wurden als
+  Vorlage gelesen, aber bewusst generisch neu implementiert (public Repo,
+  keine privaten Pfade/Inhalte übernommen).

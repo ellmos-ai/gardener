@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Compile sources
-        run: python -m compileall -q gardener.py seed.py i18n.py tests
+        run: python -m compileall -q gardener.py seed.py i18n.py sources.py tests
       - name: Run unit tests
         env:
           PYTHONIOENCODING: utf-8

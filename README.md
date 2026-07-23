@@ -54,6 +54,10 @@ python gardener.py absorb <file>
 python gardener.py materialize <name>
 python gardener.py sync
 python gardener.py observe
+python gardener.py observe-source add <id> <kind> [key=value ...]
+python gardener.py observe-source list
+python gardener.py observe-source remove <id>
+python gardener.py observe-source refresh [id]
 python gardener.py status
 ```
 
@@ -154,6 +158,59 @@ Details: [KONZEPT.md#tasks](KONZEPT.md#tasks-kein-separates-system-design-entsch
 af.absorb("/path/to/file.pdf")     # File → DB (dematerialize)
 af.materialize("file.pdf")          # DB → File (rematerialize)
 ```
+
+## Cross-Source Federated Index
+
+`observe()` watches Gardener's own home folder. **Observe-sources** extend
+the same read-only principle to knowledge that lives in *other* tools:
+their originals are never touched, moved, or copied in — only their text
+is added to Gardener's FTS index, and every indexed entry carries a
+`source_ref` in its `meta` so a search hit can be traced back to exactly
+where it came from (file path, DB table + row, or transcript line).
+`find()` already searches `gardener.db` + `user.db` in one query, so
+observed cross-source hits show up right alongside your own entries —
+no separate search call needed.
+
+Four source kinds:
+
+| Kind | What it indexes | Key config |
+|------|------------------|------------|
+| `markdown_dir` | A directory of markdown files, one entry per file. The `path` may itself be a glob spanning several directories (e.g. a per-project memory convention). | `path`, `glob` (default `*.md`) |
+| `remember_files` | Small note files anywhere below a root, found via a recursive glob. | `path`, `glob` (default `**/.remember`) |
+| `sqlite_table` | A single table in a foreign SQLite database, opened strictly read-only (`mode=ro`). Column names are whitelisted against the live schema before use. | `db_path`, `table`, `columns` (`content` required; `id`/`name`/`tags` optional) |
+| `agent_transcripts` | JSONL chat transcripts, indexed line by line, **text turns only** (tool calls/results and internal "thinking" blocks are skipped). Ships a built-in field mapping for Claude Code's own transcript format; any other line-based JSON transcript can be indexed via a generic dotted-path role/text mapping. Large, growing files are tailed from a saved byte offset — a refresh never re-reads what it already indexed. | `path` (glob, `**` recurses), `format` (`claude_code` default, or `generic` with `role_field`/`text_field`) |
+
+```bash
+# Index this machine's Claude Code project memories
+gardener observe-source add claude-memories markdown_dir path="~/.claude/projects/*/memory"
+
+# Index .remember notes anywhere below a root
+gardener observe-source add notes remember_files path="~/notes"
+
+# Index a table in a foreign, read-only SQLite database
+gardener observe-source add tasks-db sqlite_table db_path="~/.some-tool/tool.db" table=tasks
+
+# Index Claude Code transcripts (main conversation, text turns only)
+gardener observe-source add claude-transcripts agent_transcripts path="~/.claude/projects/*/**/*.jsonl"
+
+gardener observe-source list
+gardener observe-source refresh              # all sources
+gardener observe-source refresh claude-memories
+gardener observe-source remove claude-memories
+```
+
+```python
+af.observe_source_add("claude-memories", "markdown_dir",
+                       path="~/.claude/projects/*/memory")
+af.observe_sources()                          # refresh all configured sources
+af.find("taxes")                              # own entries + observed hits, one query
+```
+
+The `sqlite_table` adapter's `columns` mapping lets it point at any
+foreign table without Gardener knowing its schema in advance — e.g. a
+task or notes table kept by a different local tool. Configuration lives
+in `config.json` under `observe_sources`; nothing here is hardcoded to a
+specific machine or tool.
 
 ## Seeding
 

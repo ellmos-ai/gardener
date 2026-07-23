@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # therefore the distribution is named gardener-os; the module and the
 # console script stay "gardener".
 name = "gardener-os"
-version = "0.1.0"
+version = "0.3.0"
 description = "Database-centric operating system for LLMs: find, get, put, run on a single SQLite substrate."
 readme = "README.md"
 license = { text = "MIT" }
@@ -22,4 +22,4 @@ Repository = "https://github.com/ellmos-ai/gardener"
 gardener = "gardener:main"
 
 [tool.setuptools]
-py-modules = ["gardener", "i18n", "seed"]
+py-modules = ["gardener", "i18n", "seed", "sources"]

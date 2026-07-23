@@ -1,5 +1,48 @@
 # Changelog
 
+## 2026-07-23
+
+- **New (v0.3.0): Cross-source federated index.** `observe()`'s read-only,
+  "look outside" principle is extended to knowledge that lives in *other*
+  tools, not just Gardener's own home folder. New module `sources.py` with
+  four adapter kinds:
+  - `markdown_dir` -- a directory (or wildcard glob of directories) of
+    markdown files, one entry per file.
+  - `remember_files` -- `.remember`-style note files below a root, via
+    recursive glob.
+  - `sqlite_table` -- a single table in a foreign SQLite database, opened
+    strictly read-only (`mode=ro`); path/table/column-mapping come entirely
+    from config, so it can index any foreign schema without Gardener
+    knowing it in advance. Table and column names are whitelisted against
+    the live schema before use in SQL.
+  - `agent_transcripts` -- JSONL chat transcripts, indexed line by line,
+    text turns only (tool calls/results and "thinking" blocks are
+    skipped). Ships a built-in field mapping for Claude Code's own
+    transcript format, plus a generic dotted-path role/text mapping for
+    other line-based JSON transcripts. Large, growing files are tailed
+    from a saved byte offset (`~/.gardener/observe_sources_state.json`) --
+    a refresh never re-reads bytes it already indexed.
+  - Every indexed entry carries a `source_ref` in `meta` (file/DB path,
+    table+row, or transcript line+uuid) so a search hit always cites back
+    to where it actually lives. `find()` already searched `gardener.db` +
+    `user.db` in one query, so cross-source hits (stored as ordinary
+    `observed` entries in `user.db`) show up alongside your own entries
+    automatically -- no new search API needed.
+  - New `Gardener` methods: `observe_source_add`, `observe_source_remove`,
+    `observe_source_list`, `observe_sources`. New CLI: `gardener
+    observe-source add/list/remove/refresh`. Configuration lives in
+    `config.json` under `observe_sources`; nothing is hardcoded to a
+    specific machine, user, or tool.
+  - Deliberately out of scope for this release: adapter presets for the
+    Codex/Gemini/Kimi transcript formats (only Claude Code ships a
+    built-in mapping; other formats route through the generic
+    `role_field`/`text_field` mapping) and the v0.2 decay/usage-tracking
+    items (unrelated roadmap section, not touched here).
+  - Added 15 regression tests with synthetic fixtures (test suite: 19 ->
+    34), covering all four adapters, incremental refresh behavior,
+    federated search across own + observed entries, and observe-source
+    config CRUD across a simulated restart.
+
 ## 2026-07-11
 
 - Release hygiene: `i18n.py` now carries built-in German/English CLI help fallbacks, so non-editable installs that miss `locales/translations.json` still show readable help text instead of raw translation keys.

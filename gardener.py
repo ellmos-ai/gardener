@@ -974,6 +974,152 @@ class Gardener:
         )
         return default
 
+    def _save_config(self) -> None:
+        """Schreibt self.config zurueck nach config.json im Home-Ordner."""
+        config_path = self.home / "config.json"
+        config_path.write_text(
+            json.dumps(self.config, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+
+    # ------------------------------------------------------------------
+    # Cross-Source federated index (observe-sources)
+    # ------------------------------------------------------------------
+    #
+    # Read-only adapters (siehe sources.py) die Text aus fremden
+    # Wissensquellen in die eigene FTS-Suche einspeisen -- foederiert,
+    # nicht absorbiert: Originale bleiben, wo sie sind, es wird nur
+    # indexiert. Konfiguration liegt in config.json unter
+    # "observe_sources" (source_id -> {kind, ...}); Scan-Fortschritt
+    # (fuer inkrementelles Tailing grosser JSONL-Transkripte) liegt in
+    # einer separaten Laufzeitdatei in data_dir, nicht in der DB.
+
+    def _observe_source_state_path(self) -> Path:
+        return self.data_dir / "observe_sources_state.json"
+
+    def _load_observe_source_state(self) -> Dict:
+        path = self._observe_source_state_path()
+        if path.exists():
+            try:
+                return json.loads(path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                pass
+        return {}
+
+    def _save_observe_source_state(self, state: Dict) -> None:
+        path = self._observe_source_state_path()
+        path.write_text(
+            json.dumps(state, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    def observe_source_add(self, source_id: str, kind: str, **params) -> Dict:
+        """Registriert eine neue observe-source (nur Konfiguration, kein Scan).
+
+        Args:
+            source_id: eindeutiger Schluessel (wird auch Namenspraefix
+                der Eintraege: 'observed/<source_id>/...')
+            kind: einer von sources.VALID_KINDS (markdown_dir,
+                remember_files, sqlite_table, agent_transcripts)
+            **params: kind-spezifische Konfiguration (path, glob,
+                db_path, table, columns, format, ...) -- siehe
+                sources.py Modul-Docstring.
+        """
+        import sources
+        if kind not in sources.VALID_KINDS:
+            raise ValueError(
+                f"Unbekannte observe-source kind: {kind!r} "
+                f"(gueltig: {', '.join(sources.VALID_KINDS)})"
+            )
+        entry = {"kind": kind, "enabled": True, **params}
+        self.config.setdefault("observe_sources", {})[source_id] = entry
+        self._save_config()
+        return entry
+
+    def observe_source_remove(self, source_id: str) -> bool:
+        """Entfernt eine observe-source-Konfiguration (Config, nicht die
+        bereits indexierten Eintraege -- die bleiben bis delete()/consolidate()).
+        """
+        sources_cfg = self.config.get("observe_sources", {})
+        if source_id not in sources_cfg:
+            return False
+        del sources_cfg[source_id]
+        self._save_config()
+
+        state = self._load_observe_source_state()
+        if source_id in state:
+            del state[source_id]
+            self._save_observe_source_state(state)
+        return True
+
+    def observe_source_list(self) -> Dict:
+        """Gibt die konfigurierten observe-sources zurueck (source_id -> config)."""
+        return dict(self.config.get("observe_sources", {}))
+
+    def observe_sources(self, source_id: Optional[str] = None) -> Dict:
+        """Fuehrt die konfigurierten observe-source-Adapter aus (foederierte
+        Cross-Source-Indexierung). Rein lesend gegenueber den Quellen: nur
+        der eigene FTS-Index wird aktualisiert, Originale werden nie
+        veraendert, verschoben oder geloescht.
+
+        Args:
+            source_id: nur diese eine Quelle aktualisieren (Default: alle)
+
+        Returns:
+            {source_id: {"kind": ..., "indexed": n, "skipped": n}} bzw.
+            {"error": ...} pro Quelle bei Fehlern.
+        """
+        import sources
+
+        configs = self.config.get("observe_sources", {})
+        if source_id is not None:
+            if source_id not in configs:
+                return {"error": f"Unbekannte observe-source: {source_id}"}
+            configs = {source_id: configs[source_id]}
+
+        all_state = self._load_observe_source_state()
+        stats: Dict[str, Dict] = {}
+
+        for sid, cfg in configs.items():
+            if not cfg.get("enabled", True):
+                stats[sid] = {"skipped_disabled": True}
+                continue
+
+            kind = cfg.get("kind")
+            file_state = all_state.setdefault(sid, {})
+            indexed = 0
+            skipped = 0
+            try:
+                for item in sources.scan(sid, cfg, state=file_state):
+                    existing = self.get(item.name)
+                    if (existing and existing.get("meta", {}).get(
+                            "source_fingerprint") == item.fingerprint):
+                        skipped += 1
+                        continue
+
+                    meta = dict(item.meta)
+                    meta.update({
+                        "source_id": sid,
+                        "source_kind": kind,
+                        "source_fingerprint": item.fingerprint,
+                        "observed": True,
+                    })
+                    self.put(item.name, content=item.content, type="observed",
+                             tags=item.tags, meta=meta, target="user")
+                    indexed += 1
+                stats[sid] = {"kind": kind, "indexed": indexed, "skipped": skipped}
+            except Exception as e:
+                # Eine kaputte Quellen-Konfiguration darf den Refresh der
+                # anderen Quellen nicht abreissen (gleiches Prinzip wie
+                # sync()'s Fehlerbehandlung pro Datei).
+                stats[sid] = {
+                    "error": f"{e.__class__.__name__}: {e}",
+                    "indexed": indexed, "skipped": skipped,
+                }
+
+        self._save_observe_source_state(all_state)
+        return stats
+
     # ------------------------------------------------------------------
     # Hilfsfunktionen
     # ------------------------------------------------------------------
@@ -1102,6 +1248,10 @@ def main():
             ("gardener materialize <name>", "cmd.materialize"),
             ("gardener sync", "cmd.sync"),
             ("gardener observe", "cmd.observe"),
+            ("gardener observe-source add <id> <kind> [k=v...]", "cmd.observe_source_add"),
+            ("gardener observe-source list", "cmd.observe_source_list"),
+            ("gardener observe-source remove <id>", "cmd.observe_source_remove"),
+            ("gardener observe-source refresh [id]", "cmd.observe_source_refresh"),
             ("gardener memo <text>", "cmd.memo"),
             ("gardener lesson <titel> [text]", "cmd.lesson"),
             ("gardener recall <query>", "cmd.recall"),
@@ -1182,6 +1332,59 @@ def main():
         print(f"  Modus: {result['mode']}")
         print(f"  Absorbiert: {result['absorbed']}")
         print(f"  Beobachtet: {result['observed']}")
+
+    elif cmd == "observe-source":
+        sub = sys.argv[2] if len(sys.argv) > 2 else ""
+
+        if sub == "add":
+            if len(sys.argv) < 5:
+                print("  Nutzung: gardener observe-source add <id> <kind> [key=value ...]")
+            else:
+                source_id, kind = sys.argv[3], sys.argv[4]
+                params = {}
+                for kv in sys.argv[5:]:
+                    if "=" in kv:
+                        k, v = kv.split("=", 1)
+                        params[k] = v
+                try:
+                    entry = af.observe_source_add(source_id, kind, **params)
+                    print(f"  [OK] '{source_id}' ({entry['kind']}) registriert")
+                except ValueError as e:
+                    print(f"  [FEHLER] {e}")
+
+        elif sub == "list":
+            configured = af.observe_source_list()
+            for sid, cfg in configured.items():
+                status = "on " if cfg.get("enabled", True) else "off"
+                print(f"  [{status}] {sid:20s} {cfg.get('kind', '?')}")
+            if not configured:
+                print("  Keine observe-sources konfiguriert.")
+
+        elif sub == "remove":
+            source_id = sys.argv[3] if len(sys.argv) > 3 else ""
+            if af.observe_source_remove(source_id):
+                print(f"  [OK] '{source_id}' entfernt")
+            else:
+                print(f"  Nicht gefunden: {source_id}")
+
+        elif sub == "refresh":
+            source_id = sys.argv[3] if len(sys.argv) > 3 else None
+            result = af.observe_sources(source_id)
+            for sid, s in result.items():
+                if sid == "error":
+                    print(f"  [FEHLER] {s}")
+                elif "error" in s:
+                    print(f"  [FEHLER] {sid}: {s['error']}")
+                elif s.get("skipped_disabled"):
+                    print(f"  [--] {sid}: deaktiviert")
+                else:
+                    print(f"  [OK] {sid} ({s['kind']}): "
+                          f"{s['indexed']} indexiert, {s['skipped']} unveraendert")
+            if not result:
+                print("  Keine observe-sources konfiguriert.")
+
+        else:
+            print("  Nutzung: gardener observe-source <add|list|remove|refresh> ...")
 
     elif cmd == "list":
         type_filter = sys.argv[2] if len(sys.argv) > 2 else None
