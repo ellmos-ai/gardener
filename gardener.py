@@ -1022,8 +1022,8 @@ class Gardener:
             kind: einer von sources.VALID_KINDS (markdown_dir,
                 remember_files, sqlite_table, agent_transcripts)
             **params: kind-spezifische Konfiguration (path, glob,
-                db_path, table, columns, format, ...) -- siehe
-                sources.py Modul-Docstring.
+                patterns, db_path, table, columns, format, ...) --
+                siehe sources.py Modul-Docstring.
         """
         import sources
         if kind not in sources.VALID_KINDS:

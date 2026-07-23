@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # therefore the distribution is named gardener-os; the module and the
 # console script stay "gardener".
 name = "gardener-os"
-version = "0.3.0"
+version = "0.3.1"
 description = "Database-centric operating system for LLMs: find, get, put, run on a single SQLite substrate."
 readme = "README.md"
 license = { text = "MIT" }

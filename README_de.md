@@ -177,7 +177,7 @@ Vier Quellenarten:
 
 | Art | Was indexiert wird | Wichtige Config |
 |---|---|---|
-| `markdown_dir` | Ein Verzeichnis mit Markdown-Dateien, ein Eintrag pro Datei. `path` darf selbst ein Glob sein, das mehrere Verzeichnisse abdeckt (z. B. eine Pro-Projekt-Memory-Konvention). | `path`, `glob` (Default `*.md`) |
+| `markdown_dir` | Ein Verzeichnis mit Markdown-Dateien, ein Eintrag pro Datei. `path` darf selbst ein Glob sein, das mehrere Verzeichnisse abdeckt (z. B. eine Pro-Projekt-Memory-Konvention). `patterns` erweitert dies auf andere Dateiarten (z. B. `.txt`-Notizen). | `path`, `patterns` (Liste, Default `["*.md"]`), `glob` (einzelnes Muster, veralteter Alias) |
 | `remember_files` | Kleine Notiz-Dateien irgendwo unterhalb einer Wurzel, gefunden über rekursives Glob. | `path`, `glob` (Default `**/.remember`) |
 | `sqlite_table` | Eine einzelne Tabelle in einer fremden SQLite-Datenbank, streng lesend geöffnet (`mode=ro`). Spaltennamen werden vor Nutzung gegen das echte Schema geprüft (Whitelist). | `db_path`, `table`, `columns` (`content` Pflicht; `id`/`name`/`tags` optional) |
 | `agent_transcripts` | JSONL-Chat-Transkripte, zeilenweise indexiert, **nur Text-Turns** (Tool-Aufrufe/-Ergebnisse und interne „Thinking"-Blöcke werden übersprungen). Bringt ein eingebautes Feld-Mapping für Claude Codes eigenes Transkriptformat mit; jedes andere zeilenbasierte JSON-Transkript lässt sich über ein generisches Dotted-Path-Role/Text-Mapping indexieren. Große, wachsende Dateien werden ab einem gespeicherten Byte-Offset weitergelesen — ein Refresh liest nie erneut, was schon indexiert wurde. | `path` (Glob, `**` rekursiv), `format` (`claude_code` Default, oder `generic` mit `role_field`/`text_field`) |
@@ -206,6 +206,11 @@ af.observe_source_add("claude-memories", "markdown_dir",
                        path="~/.claude/projects/*/memory")
 af.observe_sources()                          # alle konfigurierten Quellen aktualisieren
 af.find("steuer")                              # eigene Eintraege + beobachtete Treffer, eine Anfrage
+
+# Listen-wertige Config wie `patterns` braucht die Python-API -- die CLI-
+# Form key=value akzeptiert nur Strings, kein JSON.
+af.observe_source_add("mixed-notes", "markdown_dir",
+                       path="~/notes", patterns=["*.md", "*.txt"])
 ```
 
 Das `columns`-Mapping des `sqlite_table`-Adapters erlaubt es, auf jede

@@ -105,6 +105,56 @@ class TestMarkdownDirSource(ObserveSourceTestCase):
         self.assertTrue(hits[0]["name"].startswith("observed/mem/"))
 
 
+class TestMarkdownDirPatterns(ObserveSourceTestCase):
+    def test_default_patterns_only_match_markdown(self):
+        mem_dir = self.foreign / "memory"
+        mem_dir.mkdir(parents=True, exist_ok=True)
+        (mem_dir / "notes.md").write_text("Markdown-Notiz.", encoding="utf-8")
+        (mem_dir / "notes.txt").write_text("Text-Notiz.", encoding="utf-8")
+
+        self.af.observe_source_add("mem", "markdown_dir", path=str(mem_dir))
+        result = self.af.observe_sources("mem")
+        # Unchanged default behaviour: only the *.md file is picked up,
+        # the .txt sibling is ignored.
+        self.assertEqual(result["mem"]["indexed"], 1)
+        self.assertEqual(self.af.find("Text-Notiz"), [])
+        self.assertEqual(len(self.af.find("Markdown-Notiz")), 1)
+
+    def test_patterns_config_also_indexes_txt_files(self):
+        mem_dir = self.foreign / "memory"
+        mem_dir.mkdir(parents=True, exist_ok=True)
+        (mem_dir / "notes.md").write_text("Markdown-Notiz.", encoding="utf-8")
+        (mem_dir / "notes.txt").write_text("Reine Textnotiz.", encoding="utf-8")
+        (mem_dir / "ignored.json").write_text("{}", encoding="utf-8")
+
+        self.af.observe_source_add(
+            "mem", "markdown_dir", path=str(mem_dir), patterns=["*.md", "*.txt"])
+        result = self.af.observe_sources("mem")
+        self.assertEqual(result["mem"]["indexed"], 2)
+
+        self.assertEqual(len(self.af.find("Markdown-Notiz")), 1)
+        hits = self.af.find("Reine Textnotiz")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["meta"]["source_ref"]["kind"], "markdown_dir")
+        self.assertTrue(hits[0]["name"].endswith("notes.txt"))
+        self.assertEqual(self.af.find("ignored"), [])
+
+    def test_legacy_single_glob_still_works(self):
+        # Backward compatibility: the older singular `glob` key (one
+        # pattern) must keep working unchanged for existing configs.
+        mem_dir = self.foreign / "memory"
+        mem_dir.mkdir(parents=True, exist_ok=True)
+        (mem_dir / "notes.md").write_text("Markdown-Notiz.", encoding="utf-8")
+        (mem_dir / "notes.txt").write_text("Reine Textnotiz.", encoding="utf-8")
+
+        self.af.observe_source_add(
+            "mem", "markdown_dir", path=str(mem_dir), glob="*.txt")
+        result = self.af.observe_sources("mem")
+        self.assertEqual(result["mem"]["indexed"], 1)
+        self.assertEqual(len(self.af.find("Reine Textnotiz")), 1)
+        self.assertEqual(self.af.find("Markdown-Notiz"), [])
+
+
 class TestRememberFilesSource(ObserveSourceTestCase):
     def test_recursive_glob_finds_nested_remember_files(self):
         nested = self.foreign / "some" / "deep" / "project"

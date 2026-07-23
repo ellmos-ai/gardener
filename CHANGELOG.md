@@ -43,6 +43,21 @@
     federated search across own + observed entries, and observe-source
     config CRUD across a simulated restart.
 
+- **New (v0.3.1): `patterns` config for `markdown_dir`.** The
+  `markdown_dir` observe-source adapter can now match more than one
+  filename pattern per directory via an optional `patterns` list in
+  config (default `["*.md"]`), e.g. `patterns=["*.md", "*.txt"]` to
+  index plain-text notes alongside markdown in the same source. Files
+  matching more than one pattern are only indexed once. Backward
+  compatible: the older singular `glob` key keeps working unchanged
+  for existing configs; `patterns` takes precedence if both are set.
+  List-valued config like `patterns` has to go through the Python API
+  (`af.observe_source_add(...)`) -- the CLI's plain `key=value` form
+  only accepts strings, not JSON.
+  - Added 3 regression tests (test suite: 34 -> 37) covering the
+    default markdown-only behavior, the new `patterns` list, and the
+    legacy single-`glob` backward-compatibility path.
+
 ## 2026-07-11
 
 - Release hygiene: `i18n.py` now carries built-in German/English CLI help fallbacks, so non-editable installs that miss `locales/translations.json` still show readable help text instead of raw translation keys.

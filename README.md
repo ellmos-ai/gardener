@@ -175,7 +175,7 @@ Four source kinds:
 
 | Kind | What it indexes | Key config |
 |------|------------------|------------|
-| `markdown_dir` | A directory of markdown files, one entry per file. The `path` may itself be a glob spanning several directories (e.g. a per-project memory convention). | `path`, `glob` (default `*.md`) |
+| `markdown_dir` | A directory of markdown files, one entry per file. The `path` may itself be a glob spanning several directories (e.g. a per-project memory convention). `patterns` widens this to other file kinds (e.g. `.txt` notes). | `path`, `patterns` (list, default `["*.md"]`), `glob` (single-pattern legacy alias) |
 | `remember_files` | Small note files anywhere below a root, found via a recursive glob. | `path`, `glob` (default `**/.remember`) |
 | `sqlite_table` | A single table in a foreign SQLite database, opened strictly read-only (`mode=ro`). Column names are whitelisted against the live schema before use. | `db_path`, `table`, `columns` (`content` required; `id`/`name`/`tags` optional) |
 | `agent_transcripts` | JSONL chat transcripts, indexed line by line, **text turns only** (tool calls/results and internal "thinking" blocks are skipped). Ships a built-in field mapping for Claude Code's own transcript format; any other line-based JSON transcript can be indexed via a generic dotted-path role/text mapping. Large, growing files are tailed from a saved byte offset — a refresh never re-reads what it already indexed. | `path` (glob, `**` recurses), `format` (`claude_code` default, or `generic` with `role_field`/`text_field`) |
@@ -204,6 +204,11 @@ af.observe_source_add("claude-memories", "markdown_dir",
                        path="~/.claude/projects/*/memory")
 af.observe_sources()                          # refresh all configured sources
 af.find("taxes")                              # own entries + observed hits, one query
+
+# List-valued config like `patterns` needs the Python API -- the CLI's
+# plain key=value form only accepts strings, not JSON.
+af.observe_source_add("mixed-notes", "markdown_dir",
+                       path="~/notes", patterns=["*.md", "*.txt"])
 ```
 
 The `sqlite_table` adapter's `columns` mapping lets it point at any

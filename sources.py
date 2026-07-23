@@ -29,6 +29,8 @@ Four adapter kinds, registered in ``ADAPTERS``:
                        markdown files, one entry per file. Covers
                        tools that keep per-project markdown memories,
                        e.g. Claude Code's ``~/.claude/projects/*/memory``.
+                       ``patterns`` (default ``["*.md"]``) can widen
+                       this to other file kinds, e.g. ``.txt`` notes.
   remember_files       Small note files matched by a recursive glob
                        (default pattern: ``**/.remember``).
   sqlite_table         A single table in a foreign, read-only SQLite
@@ -113,21 +115,32 @@ def _dig(d: Any, dotted_path: str) -> Any:
 # Adapter: markdown_dir / remember_files (share a file-glob scanner)
 # ---------------------------------------------------------------------------
 
-def _iter_text_files(source_id: str, config: Dict, default_glob: str,
+def _iter_text_files(source_id: str, config: Dict, default_patterns,
                       kind_tag: str) -> Iterator[SourceItem]:
     """Shared scanner for markdown_dir and remember_files.
 
     config:
         path: a directory, OR a glob pattern that expands to one or
               more directories (e.g. '~/.claude/projects/*/memory').
-        glob: filename pattern within each matched directory
-              (default: `default_glob`; '**/...' patterns recurse).
+        patterns: list of filename patterns matched within each
+              matched directory (default: `default_patterns`;
+              '**/...' patterns recurse). Every file matching ANY
+              pattern is indexed once, e.g. `["*.md", "*.txt"]` to
+              cover both markdown and plain-text notes in one source.
+        glob: single filename pattern -- older alias kept for
+              backward compatibility, equivalent to `patterns: [glob]`.
+              Ignored if `patterns` is also set.
     """
     raw_path = str(config.get("path", ""))
     if not raw_path:
         return
     base_pattern = os.path.expanduser(raw_path)
-    file_glob = config.get("glob", default_glob)
+    if "patterns" in config:
+        file_patterns = list(config["patterns"])
+    elif "glob" in config:
+        file_patterns = [config["glob"]]
+    else:
+        file_patterns = list(default_patterns)
 
     # glob.glob() on a plain, non-wildcard, existing path simply returns
     # that path -- so this one call covers both a literal directory and
@@ -136,9 +149,13 @@ def _iter_text_files(source_id: str, config: Dict, default_glob: str,
         bp = Path(base_dir)
         if not bp.is_dir():
             continue
-        for file_path in sorted(bp.glob(file_glob)):
-            if not file_path.is_file():
-                continue
+        # Collect matches from every pattern into a set first, then sort
+        # once -- so a file matched by two patterns is only indexed once,
+        # and ordering stays deterministic across the combined results.
+        matched_files = set()
+        for file_glob in file_patterns:
+            matched_files.update(p for p in bp.glob(file_glob) if p.is_file())
+        for file_path in sorted(matched_files):
             try:
                 stat = file_path.stat()
                 content = file_path.read_text(encoding="utf-8", errors="replace")
@@ -162,14 +179,20 @@ def _iter_text_files(source_id: str, config: Dict, default_glob: str,
 
 
 def scan_markdown_dir(source_id: str, config: Dict) -> Iterator[SourceItem]:
-    """A directory (or glob of directories) of markdown memory files."""
-    yield from _iter_text_files(source_id, config, default_glob="*.md",
+    """A directory (or glob of directories) of markdown memory files.
+
+    By default only `*.md` files are matched; pass `patterns` in config
+    (e.g. `patterns=["*.md", "*.txt"]`) to also cover plain-text or
+    other file kinds in the same source.
+    """
+    yield from _iter_text_files(source_id, config, default_patterns=["*.md"],
                                  kind_tag="markdown_dir")
 
 
 def scan_remember_files(source_id: str, config: Dict) -> Iterator[SourceItem]:
     """`.remember`-style note files anywhere below a root, via glob."""
-    yield from _iter_text_files(source_id, config, default_glob="**/.remember",
+    yield from _iter_text_files(source_id, config,
+                                 default_patterns=["**/.remember"],
                                  kind_tag="remember_files")
 
 
