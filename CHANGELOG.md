@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-07-25 (later)
+
+- **Documentation clean-up (repo after-care)**:
+  - Removed references to internal, non-resolvable directory names from the
+    public documents (`ROADMAP.md`, `docs/decisions/knowledge-index.md`,
+    `locales/translations.json`). They meant nothing to outside readers.
+  - `ROADMAP.md` is English again: the trailing sections had drifted back into
+    German and carried internal migration notes. Replaced by a short,
+    publicly meaningful "Gardener as a memory module" section, and the German
+    counterpart added to `ROADMAP_de.md` — both roadmaps now cover the same
+    ground.
+  - Architecture tree in both READMEs completed (`sources.py`, `i18n.py`,
+    `locales/`, `tests/` were missing); header now states the version instead
+    of a stale date.
+  - Corrected observe-source test count 15 → 17 in both roadmaps (counted at
+    the source); full suite verified at 37 passing.
+  - Module manifest `visibility` set to `public` (the repository has been
+    public for a while); `_after-care/` added to `.gitignore`.
+
 ## 2026-07-25
 
 - **Maintenance & Technical Hygiene**:

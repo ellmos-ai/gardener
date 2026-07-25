@@ -44,5 +44,8 @@ id_ed25519
 *BRIEFING*
 CORE.txt
 
+# Laufprotokolle der Repo-Pflege (Pipeline-Material, kein Repo-Inhalt)
+_after-care/
+
 # Interne Multi-Agenten-Koordination (LOCK-System)
 LOCK*.txt
