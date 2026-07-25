@@ -2,7 +2,7 @@
 
 **🇬🇧 [English Version](ROADMAP.md)**
 
-> Aktualisiert: 2026-03-12
+> Aktualisiert: 2026-07-25
 
 ## Prototyp (v0.1) — ERLEDIGT
 

@@ -2,7 +2,7 @@
 
 **🇩🇪 [Deutsche Version](ROADMAP_de.md)**
 
-> Updated: 2026-03-12
+> Updated: 2026-07-25
 
 ## Prototype (v0.1) — DONE
 
