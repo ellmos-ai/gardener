@@ -38,7 +38,7 @@ LOCAL_DATA_DIR = Path(os.environ.get(
     os.path.expanduser("~/.gardener")
 ))
 
-# Der Ordner den der User sieht (kann in OneDrive liegen)
+# Der Ordner den der User sieht (darf in einem Cloud-Sync-Ordner liegen)
 DEFAULT_HOME = Path(os.environ.get(
     "GARDENER_HOME",
     os.path.expanduser("~/gardener")

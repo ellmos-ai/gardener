@@ -94,87 +94,63 @@ and letting the worse be forgotten.
 
 ---
 
-## Cross-Source federated index (v0.3+) — 2026-07-06
+## Cross-source federated index (v0.3+)
 
-Gardener wird der **Sucheinstieg über verteiltes Wissen**, nicht nur über die
-eigene DB. Ausgangslage: Rinnsal und BACH haben **kein** FTS, Gardener hat es
-bereits — und Gardeners `observe()` ist konzeptionell schon der richtige,
-**föderierte** Mechanismus („beobachten statt besitzen", read-only).
+Gardener becomes the search entry point for knowledge that is *distributed*
+across tools, not just for its own database. `observe()` is conceptually
+already the right federated mechanism: watch, don't own — strictly read-only.
 
-**Status 2026-07-23: erste Ausbaustufe umgesetzt** (`sources.py`,
-`Gardener.observe_source_*`/`observe_sources()`, CLI `gardener observe-source
-add/list/remove/refresh`, 15 Tests). Details: README.md/README_de.md
-Abschnitt "Cross-Source Federated Index", CHANGELOG.md 2026-07-23.
+**Status: first stage shipped** (`sources.py`, `Gardener.observe_source_*` /
+`observe_sources()`, CLI `gardener observe-source add/list/remove/refresh`,
+17 tests). Details: the "Cross-Source Federated Index" section in
+README.md / README_de.md, and the 2026-07-23 entry in CHANGELOG.md.
 
-- [x] `observe()` auf **fremde Wissensquellen** erweitert: vier read-only-
-  Adapter (`markdown_dir`, `remember_files`, `sqlite_table`,
-  `agent_transcripts`). `sqlite_table` ist generisch (Pfad+Tabelle+Spalten-
-  Mapping aus config.json) und deckt damit `rinnsal`-artige/`bach.db`-artige
-  Tabellen ab, ohne deren Schema fest zu verdrahten. Quellen bleiben **wo sie
-  sind** (SQLite strikt `mode=ro` geöffnet); Gardener indexiert nur — **kein
-  `absorb`/Reinkopieren**. `agent_transcripts` liest GB-große JSONL-
-  Transkripte inkrementell ab gespeichertem Byte-Offset (kein Re-Read bei
-  unveränderten Dateien). **Offen:** eigene `format`-Presets für
-  Codex-/Gemini-/Kimi-Transkriptformate (bislang: eingebautes `claude_code`-
-  Mapping + generisches Dotted-Path-Role/Text-Mapping für alles andere).
-- [x] Treffer zitieren zurück zur Quelle: jeder observed-Eintrag trägt
-  `meta.source_ref` (Datei-/DB-Pfad, Tabelle+Zeile, oder Transkript-Zeile+uuid).
-- [x] Föderierte FTS-Suche über eigene + beobachtete Quellen in einem Query:
-  `find()` durchsuchte bereits `gardener.db`+`user.db` gemeinsam; Cross-
-  Source-Einträge landen wie normale `observed`-Einträge in `user.db` und
-  erscheinen damit automatisch mit.
-- [x] Quellenliste erweitert [U 2026-07-11]: **Claude-Memories**
-  (`markdown_dir`, deckt `~/.claude/projects/*/memory/` konfigurierbar ab)
-  und **`.remember`-Dateien** (`remember_files`) sind eigene Adapter. Die
-  **`_TOM-lm`-Adapter** (`_control-center/_TOM-lm/_tool/adapters/`) wurden als
-  Vorlage gelesen (Extraktionslogik für Claude Code JSONL verstanden), aber
-  bewusst NICHT übernommen — public Repo, keine privaten Pfade/Inhalte; der
-  `agent_transcripts`-Adapter ist eine eigenständige, generische
-  Neu-Implementierung.
+- [x] `observe()` extended to **foreign knowledge sources** through four
+  read-only adapters (`markdown_dir`, `remember_files`, `sqlite_table`,
+  `agent_transcripts`). `sqlite_table` is generic — path, table and column
+  mapping come from `config.json` — so it covers a foreign tool's task or
+  notes table without hardcoding its schema. Sources stay **where they are**
+  (SQLite opened strictly `mode=ro`); Gardener only indexes, it never copies
+  them in. `agent_transcripts` reads GB-sized JSONL transcripts incrementally
+  from a stored byte offset, so an unchanged file is never re-read.
+  **Open:** dedicated `format` presets for transcript formats other than
+  Claude Code (currently: the built-in `claude_code` mapping plus a generic
+  dotted-path role/text mapping for everything else).
+- [x] Hits cite their way back to the source: every observed entry carries
+  `meta.source_ref` (file path, DB table + row, or transcript line + uuid).
+- [x] Federated FTS search over own and observed sources in a single query:
+  `find()` already searched `gardener.db` + `user.db` together, and
+  cross-source entries land in `user.db` like any other `observed` entry, so
+  they show up automatically.
+- [x] Source list widened: **agent memory directories** (`markdown_dir`,
+  covering a configurable per-project memory convention) and **`.remember`
+  files** (`remember_files`) are adapters of their own. The
+  `agent_transcripts` adapter is an independent, generic implementation — no
+  private paths or contents were carried over from any internal tooling.
 
-Abgrenzung: `absorb` = ins Haus holen (klein/kuratiert) vs. `observe`-Index =
-föderiert (fremd/groß, read-only). Vorbild `ctx` (ctxrs, **Apache-2.0**,
-pull/passiv) — deckt aber nur Coding-Agent-Transkripte ab, nicht unsere DBs;
-Eigenbau via Gardener bevorzugt. Hintergrund/Recherche:
-`.AI/.MODULES/knowledge-index/KONZEPT.md`.
+Boundary: `absorb` = bring it into the house (small, curated) vs. the
+`observe` index = federated (foreign, large, read-only). Prior art: `ctx`
+(ctxrs, Apache-2.0, pull/passive), which covers coding-agent transcripts but
+not arbitrary local databases — hence the in-house adapter set. Background and
+research: [docs/decisions/knowledge-index.md](docs/decisions/knowledge-index.md).
 
 
-## Gardener als Memory-Modul + lawn-mower-Stack (2026-07-06)
+## Gardener as a memory module
 
-Richtungsentscheidung mit User: Gardener wird primär als **Memory-Modul**
-verstanden (Kategorie `.MEMORY` in `.MODULES`) — funktioniert zugleich als
-absolut minimales OS.
+Gardener is understood primarily as a **memory module** that also happens to
+work as an extremely small operating system on its own. Within the ellmos
+memory stack the roles are split three ways:
 
-- **lawn-mower (geplant):** ein **Stack**, der Gardener (organisch/emergent,
-  absorb/observe/decay) + USMC (strukturiert/kuratiert, facts/lessons) kombiniert
-  und das **Standard-Memory** wird.
-- **BACH-Transfer (Roadmap):** BACH hat evtl. schönere/bessere Memory-Funktionen
-  → diese nach **USMC** transferieren; BACH **reimportiert** später `lawn-mower`
-  als sein Gedächtnis (nutzt dann den Standard-Memory-Stack statt Eigenbau).
-- **Task-Faktenlage:** USMC = reines Memory (keine Tasks); Tasks liegen in
-  Rinnsal (`rinnsal_tasks`); Gardener vermischt Tasks+Memory bewusst
-  (`type='task'`). Offene Designfrage für den Memory-Stack.
-- Physische Umordnung (`.MODULES/.MEMORY/gardener`) erst später/manuell — dann
-  homebase-Engine-Pfad (`[engines.garden].path`) nachziehen.
+- **USMC** — curated session and core memory, and the entry point/facade of
+  the memory system.
+- **Gardener** — the memory *supplier*: organic growth (absorb / observe /
+  decay) plus the cross-source index.
+- **TASKPLAN** — the task system as a separate module.
 
-### Update 2026-07-11 — .MEMORY-Säule, Gardener als Zulieferer [U 2026-07-11]
+This also settles an older open design question: task management belongs to
+TASKPLAN, while Gardener's `type='task'` entries stay what they always were —
+organic observation material, not a task system.
 
-- Zielort ist jetzt eine **eigene Säule `.AI/.MEMORY/`** (statt `.MODULES/.MEMORY`);
-  Gardener zieht aus `.OS` dorthin um.
-- Rollenklärung: **USMC** (rehabilitiert, Deprecation aufgehoben) = kuratiertes
-  Session-Memory + **Fassade/Einstiegspunkt** des Memory-Systems; **Gardener** =
-  Memory-**Zulieferer** (Wildwuchs + Cross-Source-Index); **TASKPLAN** = Task-System
-  als drittes Modul (extrahiert aus `rinnsal/tasks`).
-- Das beantwortet die offene Task-Designfrage: Tasks wandern zu **TASKPLAN**;
-  Gardeners `type='task'` bleibt nur organisches Beobachtungsgut, kein Task-System.
-- lawn-mower als eigener Stack entfällt — geht in `.MEMORY` (USMC+GARDENER+TASKPLAN) auf.
-- Physische Umordnung weiterhin später/manuell (siehe `.AI/.MEMORY/README.md`,
-  Migrationsstand) — dann homebase-Engine-Pfad nachziehen.
-
-### Folgeupdate 2026-07-11 — Baukasten-Rückführung [U 2026-07-11]
-
-- Die funktionale `.MEMORY`-Kapselung bleibt erhalten, ist nun aber die
-  Fähigkeitsfamilie `.AI/.MODULES/.MEMORY/` statt einer eigenen Root-Säule.
-- GARDENER, USMC und TASKPLAN wurden nach katalog-first Vorbereitung physisch
-  dorthin zurückgeführt. Homebase löst GARDENER zuerst über die Modul-ID auf und
-  behält die beiden früheren Orte nur als Kompatibilitätsfallback.
+- **BACH transfer (planned):** move BACH's stronger memory functions over to
+  USMC; BACH then re-imports the shared memory stack instead of maintaining
+  its own.

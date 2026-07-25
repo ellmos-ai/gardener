@@ -101,7 +101,7 @@ Mechanismus („beobachten statt besitzen", read-only).
 
 **Status 2026-07-23: erste Ausbaustufe umgesetzt** (`sources.py`,
 `Gardener.observe_source_*`/`observe_sources()`, CLI `gardener observe-source
-add/list/remove/refresh`, 15 Tests). Details: README_de.md Abschnitt
+add/list/remove/refresh`, 17 Tests). Details: README_de.md Abschnitt
 "Cross-Source Federated Index", CHANGELOG.md 2026-07-23.
 
 - [x] Vier read-only-Adapter: `markdown_dir`, `remember_files`,
@@ -114,7 +114,35 @@ add/list/remove/refresh`, 15 Tests). Details: README_de.md Abschnitt
 - [x] Treffer zitieren zurück zur Quelle via `meta.source_ref`.
 - [x] Föderierte FTS-Suche über eigene + beobachtete Quellen in einem Query
   (bestehendes `find()` durchsuchte bereits beide DBs gemeinsam).
-- [x] Claude-Memories (`markdown_dir`) und `.remember`-Dateien
-  (`remember_files`) als eigene Adapter. Die `_TOM-lm`-Adapter wurden als
-  Vorlage gelesen, aber bewusst generisch neu implementiert (public Repo,
-  keine privaten Pfade/Inhalte übernommen).
+- [x] Agenten-Memory-Verzeichnisse (`markdown_dir`, deckt eine konfigurierbare
+  Projekt-Memory-Konvention ab) und `.remember`-Dateien (`remember_files`) als
+  eigene Adapter. Der `agent_transcripts`-Adapter ist eine eigenständige,
+  generische Neu-Implementierung — es wurden keine privaten Pfade oder Inhalte
+  aus interner Werkzeugkette übernommen.
+
+Abgrenzung: `absorb` = ins Haus holen (klein/kuratiert) vs. `observe`-Index =
+föderiert (fremd/groß, read-only). Vorbild `ctx` (ctxrs, Apache-2.0,
+pull/passiv) — deckt aber nur Coding-Agent-Transkripte ab, nicht beliebige
+lokale Datenbanken. Hintergrund und Recherche:
+[docs/decisions/knowledge-index.md](docs/decisions/knowledge-index.md).
+
+
+## Gardener als Memory-Modul
+
+Gardener wird primär als **Memory-Modul** verstanden und funktioniert
+zugleich als absolut minimales Betriebssystem. Im ellmos-Memory-Stack sind die
+Rollen dreigeteilt:
+
+- **USMC** — kuratiertes Session- und Kern-Gedächtnis, zugleich Fassade und
+  Einstiegspunkt des Memory-Systems.
+- **Gardener** — der Memory-*Zulieferer*: organischer Wildwuchs (absorb /
+  observe / decay) plus Cross-Source-Index.
+- **TASKPLAN** — das Task-System als eigenes Modul.
+
+Damit ist auch eine ältere offene Designfrage beantwortet: Taskverwaltung
+gehört zu TASKPLAN; Gardeners `type='task'`-Einträge bleiben, was sie waren —
+organisches Beobachtungsgut, kein Task-System.
+
+- **BACH-Transfer (geplant):** BACHs stärkere Memory-Funktionen nach USMC
+  überführen; BACH importiert anschließend den gemeinsamen Memory-Stack,
+  statt einen eigenen zu pflegen.

@@ -3,7 +3,7 @@
     "description": "Gardener translation strings",
     "format": "key -> {de, en, es, zh, ja, ru}",
     "languages": ["de", "en", "es", "zh", "ja", "ru"],
-    "reference": ".SOFTWARE/_LANG/LANGUAGE_CODES.md"
+    "reference": "ISO 639-1 language codes"
   },
   "help.title": {
     "de": "Gardener -- LLM-natives Betriebssystem",
