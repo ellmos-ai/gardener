@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-25
+
+- **Maintenance & Technical Hygiene**:
+  - Added `[tool.pytest.ini_options]` with `pythonpath = "."` in `pyproject.toml` for standard pytest resolution.
+  - Updated `llms.txt` Last-checked header to 2026-07-25 and test suite count to 37 passing tests.
+  - Added Shields.io status badges and LLM integration note callout to `README.md` and `README_de.md`.
+  - Verified 37/37 unit and integration tests passing green.
+
 ## 2026-07-23
 
 - **New (v0.3.0): Cross-source federated index.** `observe()`'s read-only,
