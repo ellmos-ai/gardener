@@ -15,7 +15,7 @@
 
 **🇩🇪 [Deutsche Version](README_de.md)**
 
-> Status: Prototype | Author: Lukas Geiger + Claude | 2026-03-12
+> Status: Prototype (v0.3.1) | Author: Lukas Geiger + Claude
 
 ## What is Gardener?
 
@@ -76,7 +76,11 @@ text; unsupported languages fall back to German and English.
 ```
 Gardener/
   gardener.py          # Core: Gardener class + CLI
+  sources.py           # Read-only adapters for observed foreign sources
   seed.py              # Initial system knowledge
+  i18n.py              # CLI string lookup
+  locales/             # Translation catalogue for CLI strings
+  tests/               # unittest suite (also runnable with pytest)
   KONZEPT.md           # Design documentation (German)
   README.md            # This file
   workspace/           # Materialized code for execution

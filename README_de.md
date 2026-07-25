@@ -15,7 +15,7 @@
 
 **🇬🇧 [English Version](README.md)**
 
-> Status: Prototyp | Autor: Lukas Geiger + Claude | 2026-03-12
+> Status: Prototyp (v0.3.1) | Autor: Lukas Geiger + Claude
 
 ## Was ist Gardener?
 
@@ -77,11 +77,15 @@ und Englisch zurück.
 ```
 Gardener/
   gardener.py          # Kern: Gardener-Klasse + CLI
-  seed.py             # Initiales Systemwissen
-  KONZEPT.md          # Designdokumentation
-  README.md           # Diese Datei
-  workspace/          # Materialisierter Code zur Ausführung
-  blobs/              # Halde für große Dateien (>50MB)
+  sources.py           # Read-only-Adapter für beobachtete Fremdquellen
+  seed.py              # Initiales Systemwissen
+  i18n.py              # Nachschlagen der CLI-Texte
+  locales/             # Übersetzungskatalog für die CLI-Texte
+  tests/               # unittest-Suite (auch mit pytest lauffähig)
+  KONZEPT.md           # Designdokumentation
+  README.md            # Diese Datei
+  workspace/           # Materialisierter Code zur Ausführung
+  blobs/               # Halde für große Dateien (>50MB)
 
 Lokal (nicht in Cloud, überschreibbar mit GARDENER_DATA):
   ~/.gardener/
