@@ -171,9 +171,119 @@ class Gardener:
     # API: find()
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _build_fts_or_query(query: str) -> Optional[str]:
+        """Baut aus einer Mehrwort-Query eine FTS5-OR-Query mit Anführungszeichen.
+
+        Gibt None zurück, wenn die Query bereits explizite FTS-Operatoren oder
+        Anführungszeichen enthält oder aus nur einem Wort besteht.
+        """
+        if '"' in query or any(op in query.upper().split() for op in ["OR", "AND", "NOT", "NEAR"]):
+            return None
+
+        tokens = [t.strip() for t in query.split() if t.strip()]
+        if len(tokens) <= 1:
+            return None
+
+        cleaned = []
+        for t in tokens:
+            t_clean = t.replace('"', '""')
+            if t_clean:
+                cleaned.append(f'"{t_clean}"')
+
+        if len(cleaned) <= 1:
+            return None
+
+        return " OR ".join(cleaned)
+
+    def _fts_query(self, conn: sqlite3.Connection, match_query: str,
+                   type: Optional[str] = None, limit: int = 20) -> List[Dict]:
+        """Führt FTS5-Suche über beide Datenbanken aus."""
+        results = []
+        for db_prefix, db_label in [("main", "user"), ("other", "system")]:
+            sql = f"""
+                SELECT e.*, fts.rank AS rank, '{db_label}' as source
+                FROM {db_prefix}.everything e
+                JOIN {db_prefix}.everything_fts fts ON e.id = fts.rowid
+                WHERE {db_prefix}.everything_fts MATCH ?
+            """
+            params = [match_query]
+
+            if type:
+                sql += " AND e.type = ?"
+                params.append(type)
+
+            sql += " ORDER BY rank LIMIT ?"
+            params.append(limit)
+
+            rows = conn.execute(sql, params).fetchall()
+            for row in rows:
+                results.append(self._row_to_dict(row))
+        return results
+
+    def _like_query(self, conn: sqlite3.Connection, query: str,
+                    type: Optional[str] = None, limit: int = 20) -> List[Dict]:
+        """Fallback-LIKE-Suche über beide Datenbanken."""
+        results = []
+        tokens = [t.strip() for t in query.split() if t.strip()]
+        for db_prefix, db_label in [("main", "user"), ("other", "system")]:
+            sql = f"""
+                SELECT e.*, '{db_label}' as source
+                FROM {db_prefix}.everything e
+                WHERE (e.name LIKE ? OR e.content LIKE ? OR e.tags LIKE ?)
+            """
+            like = f"%{query}%"
+            params = [like, like, like]
+
+            if type:
+                sql += " AND e.type = ?"
+                params.append(type)
+
+            sql += " LIMIT ?"
+            params.append(limit)
+
+            rows = conn.execute(sql, params).fetchall()
+            for row in rows:
+                results.append(self._row_to_dict(row))
+
+        if not results and len(tokens) > 1:
+            for db_prefix, db_label in [("main", "user"), ("other", "system")]:
+                conditions = []
+                params = []
+                for t in tokens:
+                    l = f"%{t}%"
+                    conditions.append("(e.name LIKE ? OR e.content LIKE ? OR e.tags LIKE ?)")
+                    params.extend([l, l, l])
+
+                sql = f"""
+                    SELECT e.*, '{db_label}' as source
+                    FROM {db_prefix}.everything e
+                    WHERE ({' OR '.join(conditions)})
+                """
+                if type:
+                    sql += " AND e.type = ?"
+                    params.append(type)
+                sql += " LIMIT ?"
+                params.append(limit)
+
+                rows = conn.execute(sql, params).fetchall()
+                for row in rows:
+                    results.append(self._row_to_dict(row))
+
+        return results
+
+    # ------------------------------------------------------------------
+    # API: find()
+    # ------------------------------------------------------------------
+
     def find(self, query: str, type: Optional[str] = None,
              limit: int = 20) -> List[Dict]:
         """Durchsucht beide Datenbanken. Der primäre Zugang zu allem.
+
+        Bei Mehrwort-Suchanfragen (z. B. 'Registry Mitgliedschaft') wird zunächst
+        eine exakte/AND-Suche ausgeführt. Führt diese zu 0 Treffern, erfolgt
+        automatisch ein Fallback auf eine OR-Verknüpfung der Einzelbegriffe mit
+        FTS5-BM25-Ranking (Treffer mit allen/mehreren Begriffen stehen höher).
 
         Args:
             query: Suchbegriff (Volltextsuche)
@@ -185,51 +295,40 @@ class Gardener:
         """
         conn = self._conn("user")
         results = []
-
-        # FTS-Suche in beiden DBs
-        for db_prefix, db_label in [("main", "user"), ("other", "system")]:
+        try:
+            # 1. Exakte / Standard-FTS5-Suche
             try:
-                sql = f"""
-                    SELECT e.*, fts.rank AS rank, '{db_label}' as source
-                    FROM {db_prefix}.everything e
-                    JOIN {db_prefix}.everything_fts fts ON e.id = fts.rowid
-                    WHERE {db_prefix}.everything_fts MATCH ?
-                """
-                params = [query]
-
-                if type:
-                    sql += f" AND e.type = ?"
-                    params.append(type)
-
-                sql += f" ORDER BY rank LIMIT ?"
-                params.append(limit)
-
-                rows = conn.execute(sql, params).fetchall()
-                for row in rows:
-                    results.append(self._row_to_dict(row))
+                results = self._fts_query(conn, query, type=type, limit=limit)
             except Exception:
-                # FTS match kann fehlschlagen bei Sonderzeichen
-                # Fallback auf LIKE-Suche
-                sql = f"""
-                    SELECT e.*, '{db_label}' as source
-                    FROM {db_prefix}.everything e
-                    WHERE (e.name LIKE ? OR e.content LIKE ? OR e.tags LIKE ?)
-                """
-                like = f"%{query}%"
-                params = [like, like, like]
+                results = []
 
-                if type:
-                    sql += f" AND e.type = ?"
-                    params.append(type)
+            # 2. Mehrwort-Fallback: Wenn 0 Treffer und Mehrwort-Query, OR-Verknüpfung in FTS5 versuchen
+            if not results:
+                or_query = self._build_fts_or_query(query)
+                if or_query:
+                    try:
+                        results = self._fts_query(conn, or_query, type=type, limit=limit)
+                    except Exception:
+                        results = []
 
-                sql += f" LIMIT ?"
-                params.append(limit)
+            # 3. Fallback auf LIKE-Suche, falls FTS (auch OR) fehlschlug oder 0 Treffer ergab
+            if not results:
+                try:
+                    results = self._like_query(conn, query, type=type, limit=limit)
+                except Exception:
+                    results = []
+        finally:
+            conn.close()
 
-                rows = conn.execute(sql, params).fetchall()
-                for row in rows:
-                    results.append(self._row_to_dict(row))
-
-        conn.close()
+        # Deduplizieren nach (id, source)
+        seen = set()
+        unique_results = []
+        for r in results:
+            key = (r.get("id"), r.get("source"))
+            if key not in seen:
+                seen.add(key)
+                unique_results.append(r)
+        results = unique_results
 
         # Nach Relevanz sortieren: pinned zuerst, dann FTS-Rank (bm25,
         # kleiner = relevanter); LIKE-Fallback-Treffer (ohne Rank) werden
@@ -254,19 +353,17 @@ class Gardener:
         Sucht zuerst in user.db, dann in gardener.db.
         """
         conn = self._conn("user")
-
-        for db_prefix, db_label in [("main", "user"), ("other", "system")]:
-            row = conn.execute(
-                f"SELECT *, '{db_label}' as source FROM {db_prefix}.everything WHERE name = ?",
-                (name,)
-            ).fetchone()
-            if row:
-                result = self._row_to_dict(row)
-                conn.close()
-                return result
-
-        conn.close()
-        return None
+        try:
+            for db_prefix, db_label in [("main", "user"), ("other", "system")]:
+                row = conn.execute(
+                    f"SELECT *, '{db_label}' as source FROM {db_prefix}.everything WHERE name = ?",
+                    (name,)
+                ).fetchone()
+                if row:
+                    return self._row_to_dict(row)
+            return None
+        finally:
+            conn.close()
 
     # ------------------------------------------------------------------
     # API: put()

@@ -2,9 +2,14 @@
 
 ## 2026-07-30
 
+- **Multi-Word Query UX Improvement & FTS5 BM25 Ranking**:
+  - Implemented automatic FTS5 OR query decomposition (`_build_fts_or_query`) for multi-word queries in `find()` when strict AND search yields 0 results.
+  - Multi-word searches (e.g. `"Registry Mitgliedschaft"`) now match documents containing individual terms while automatically ranking documents containing all terms higher via FTS5 BM25 relevance. Preserves explicit quotes (`"..."`) and boolean operators (`AND`, `OR`, `NOT`).
+  - Hardened SQLite connection handling across `find()` and `get()` with strict `try...finally: conn.close()` resource protection.
+  - Added unit test cases (`test_multi_word_query_ux_or_fallback_and_ranking` and `test_build_fts_or_query_helper`) verifying 39/39 passing tests green.
 - **Maintenance & Technical Hygiene**:
   - Updated `llms.txt` `Last-checked` timestamp to `2026-07-30`.
-  - Re-verified full test suite execution (37/37 passed) and clean repository working tree.
+  - Re-verified full test suite execution (39/39 passed) and clean repository working tree.
 
 ## 2026-07-25 (later)
 

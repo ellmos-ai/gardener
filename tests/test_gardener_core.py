@@ -134,6 +134,52 @@ class TestGardenerCore(GardenerTempCase):
         names = [r["name"] for r in self.af.find("zebra")]
         self.assertEqual(names[0], "zebra-weak")
 
+    def test_multi_word_query_ux_or_fallback_and_ranking(self):
+        # Entry A contains only "Registry"
+        self.af.put(
+            "doc-registry",
+            content="Dokumentation über System-Registry Einstellungen.",
+            type="knowledge",
+        )
+        # Entry B contains only "Mitgliedschaft"
+        self.af.put(
+            "doc-mitgliedschaft",
+            content="Bescheinigung über die Mitgliedschaft im Verein.",
+            type="knowledge",
+        )
+
+        # Multi-word search when no document has both terms must still find both
+        results = self.af.find("Registry Mitgliedschaft")
+        names = [r["name"] for r in results]
+        self.assertIn("doc-registry", names)
+        self.assertIn("doc-mitgliedschaft", names)
+
+        # Entry C contains BOTH terms
+        self.af.put(
+            "doc-both",
+            content="Details zur Registry Mitgliedschaft und Benutzerrechten.",
+            type="knowledge",
+        )
+
+        # Entry C (matching both terms) must rank higher than single-term matches
+        results_with_both = self.af.find("Registry Mitgliedschaft")
+        self.assertEqual(results_with_both[0]["name"], "doc-both")
+
+    def test_build_fts_or_query_helper(self):
+        build_or = self.gardener.Gardener._build_fts_or_query
+        # Multi-word plain query -> OR query with quotes
+        self.assertEqual(
+            build_or("Registry Mitgliedschaft"), '"Registry" OR "Mitgliedschaft"'
+        )
+        # Single word -> None
+        self.assertIsNone(build_or("Registry"))
+        # Explicit quotes -> None (preserved user phrase)
+        self.assertIsNone(build_or('"Registry Mitgliedschaft"'))
+        # Explicit operators -> None (preserved user boolean query)
+        self.assertIsNone(build_or("Registry AND Mitgliedschaft"))
+        self.assertIsNone(build_or("Registry OR Mitgliedschaft"))
+        self.assertIsNone(build_or("Registry NOT Mitgliedschaft"))
+
     def test_recall_tolerates_invalid_meta_json(self):
         conn = sqlite3.connect(Path(os.environ["GARDENER_DATA"]) / "user.db")
         try:
