@@ -1,3 +1,5 @@
+<img src="assets/banner.png" width="100%" alt="Gardener banner">
+
 <p align="center">
   <img src="logo.jpg" alt="gardener logo" width="300">
 </p>
