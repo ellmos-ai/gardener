@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-30
+
+- **Maintenance & Technical Hygiene**:
+  - Updated `llms.txt` `Last-checked` timestamp to `2026-07-30`.
+  - Re-verified full test suite execution (37/37 passed) and clean repository working tree.
+
 ## 2026-07-25 (later)
 
 - **Documentation clean-up (repo after-care)**:
