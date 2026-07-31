@@ -22,7 +22,7 @@ Repository = "https://github.com/ellmos-ai/gardener"
 gardener = "gardener:main"
 
 [tool.setuptools]
-py-modules = ["gardener", "i18n", "seed", "sources"]
+py-modules = ["gardener", "i18n", "seed", "sources", "search_gui"]
 
 [tool.pytest.ini_options]
 pythonpath = "."

@@ -56,6 +56,7 @@ af.run("file-info", input={"path": "/path/to/file"})
 
 ```bash
 python gardener.py find <query>
+python gardener.py gui [--port N] [--no-browser]
 python gardener.py get <name>
 python gardener.py put <name> <text>
 python gardener.py run <name>
@@ -72,6 +73,13 @@ python gardener.py status
 
 The CLI help defaults to German. Set `GARDENER_LANG=en` for English help
 text; unsupported languages fall back to German and English.
+
+### Search GUI (for humans)
+
+`python gardener.py gui` starts a small local web UI for the FTS5 search
+(search box, type filter, BM25-ranked hits with match snippets, entry
+detail view). Pure standard library, no dependencies; it binds to
+127.0.0.1 only and is strictly read-only against both databases.
 
 ## Architecture
 

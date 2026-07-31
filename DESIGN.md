@@ -249,9 +249,12 @@ The DB is the truth, not the folder.
 
 ### DB Viewer — Ported from BACH
 
-The DB viewer will be ported from BACH (BACH's GUI server already has
-search, browse, edit for SQLite databases). Gardener only needs
-a customized view that uses `everything` + `everything_fts`.
+A first human-facing search UI now ships with the repo: `search_gui.py`
+(`python gardener.py gui`), a dependency-free, read-only web view over
+`everything` + `everything_fts` with BM25 ranking and match snippets,
+following the BACH unified_search pattern. The full DB viewer (browse,
+edit) is still planned as a port from BACH (BACH's GUI server already has
+search, browse, edit for SQLite databases).
 
 ---
 

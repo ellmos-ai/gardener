@@ -250,9 +250,13 @@ Datei wieder her. Die DB ist die Wahrheit, nicht der Ordner.
 
 ### DB-Viewer — kommt aus BACH
 
-Der DB-Viewer wird aus BACH portiert (BACHs GUI-Server hat bereits
-Search, Browse, Edit für SQLite-Datenbanken). Gardener braucht nur
-eine angepasste Ansicht die `everything` + `everything_fts` nutzt.
+Eine erste Such-Oberfläche für Menschen liegt seit 2026-07-31 bei:
+`search_gui.py` (`python gardener.py gui`) — eine dependency-freie,
+read-only Webansicht über `everything` + `everything_fts` mit
+BM25-Ranking und Treffer-Snippets, nach dem Muster von BACHs
+unified_search. Der volle DB-Viewer (Browse, Edit) bleibt als Port aus
+BACH geplant (BACHs GUI-Server hat bereits Search, Browse, Edit für
+SQLite-Datenbanken).
 
 ---
 

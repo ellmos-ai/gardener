@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-07-31
+
+- **Search GUI for humans (`search_gui.py`, `gardener gui`)**:
+  - New dependency-free, read-only web UI over the FTS5 search core:
+    search box, type filter, BM25-ranked results with match snippets and
+    an entry detail view. Pure standard library (`http.server`), binds to
+    127.0.0.1 only, GET endpoints exclusively — no writes against
+    `gardener.db`/`user.db` (privacy per design: local, read-only).
+  - Follows the BACH `unified_search` pattern (FTS5 `snippet()` markers
+    `>>>`/`<<<` rendered as highlighted matches in the browser).
+  - `find()` gained an optional `with_snippets=True` parameter returning
+    an FTS5 `snippet()` context per hit (LIKE-fallback hits carry no
+    snippet; default behaviour unchanged).
+  - CLI: new command `gui [--port N] [--no-browser]`; help text and
+    translations (`cmd.gui`) added; `pyproject.toml` ships the new
+    `search_gui` module.
+  - 11 new tests (`tests/test_search_gui.py`): snippet API, index page,
+    search/entry/status endpoints, type filter, 404 handling, read-only
+    enforcement. Suite verified at 50/50 passing.
+
 ## 2026-07-30
 
 - **Multi-Word Query UX Improvement & FTS5 BM25 Ranking**:

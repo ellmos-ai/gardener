@@ -197,15 +197,24 @@ class Gardener:
         return " OR ".join(cleaned)
 
     def _fts_query(self, conn: sqlite3.Connection, match_query: str,
-                   type: Optional[str] = None, limit: int = 20) -> List[Dict]:
+                   type: Optional[str] = None, limit: int = 20,
+                   with_snippets: bool = False) -> List[Dict]:
         """Führt FTS5-Suche über beide Datenbanken aus."""
         results = []
+        # snippet()/rank und die MATCH-Spalte brauchen den unqualifizierten
+        # FTS-Tabellennamen (SQLite löst Auxiliary-Functions sonst nicht
+        # auf); pro Schleifendurchlauf ist genau eine everything_fts im
+        # Query, daher ist der Name eindeutig.
+        snippet_sel = (
+            ", snippet(everything_fts, 1, '>>>', '<<<', ' … ', 16) AS snippet"
+            if with_snippets else ""
+        )
         for db_prefix, db_label in [("main", "user"), ("other", "system")]:
             sql = f"""
-                SELECT e.*, fts.rank AS rank, '{db_label}' as source
+                SELECT e.*, fts.rank AS rank, '{db_label}' as source{snippet_sel}
                 FROM {db_prefix}.everything e
                 JOIN {db_prefix}.everything_fts fts ON e.id = fts.rowid
-                WHERE {db_prefix}.everything_fts MATCH ?
+                WHERE everything_fts MATCH ?
             """
             params = [match_query]
 
@@ -277,7 +286,7 @@ class Gardener:
     # ------------------------------------------------------------------
 
     def find(self, query: str, type: Optional[str] = None,
-             limit: int = 20) -> List[Dict]:
+             limit: int = 20, with_snippets: bool = False) -> List[Dict]:
         """Durchsucht beide Datenbanken. Der primäre Zugang zu allem.
 
         Bei Mehrwort-Suchanfragen (z. B. 'Registry Mitgliedschaft') wird zunächst
@@ -289,6 +298,10 @@ class Gardener:
             query: Suchbegriff (Volltextsuche)
             type: Optional filtern nach Typ (knowledge, tool, task, memory, ...)
             limit: Max. Ergebnisse
+            with_snippets: Bei True enthalten FTS-Treffer ein 'snippet'-Feld
+                mit Treffer-Kontext aus dem Inhalt (Marker '>>>'/'<<<',
+                BACH-unified_search-Muster). LIKE-Fallback-Treffer haben
+                kein Snippet.
 
         Returns:
             Liste von Einträgen als Dicts
@@ -298,7 +311,8 @@ class Gardener:
         try:
             # 1. Exakte / Standard-FTS5-Suche
             try:
-                results = self._fts_query(conn, query, type=type, limit=limit)
+                results = self._fts_query(conn, query, type=type, limit=limit,
+                                          with_snippets=with_snippets)
             except Exception:
                 results = []
 
@@ -307,7 +321,8 @@ class Gardener:
                 or_query = self._build_fts_or_query(query)
                 if or_query:
                     try:
-                        results = self._fts_query(conn, or_query, type=type, limit=limit)
+                        results = self._fts_query(conn, or_query, type=type, limit=limit,
+                                                  with_snippets=with_snippets)
                     except Exception:
                         results = []
 
@@ -1338,6 +1353,7 @@ def main():
         print(t("help.commands"))
         commands = [
             ("gardener find <query>", "cmd.find"),
+            ("gardener gui [--port N] [--no-browser]", "cmd.gui"),
             ("gardener get <name>", "cmd.get"),
             ("gardener put <name> <text>", "cmd.put"),
             ("gardener run <name>", "cmd.run"),
@@ -1375,6 +1391,29 @@ def main():
             print(f"  [{r['type']:10s}] {r['name']:30s} ({src})")
         if not results:
             print("  Keine Ergebnisse.")
+
+    elif cmd == "gui":
+        # Such-GUI für menschliche Nutzer (lokaler Webserver, read-only)
+        import search_gui
+        port = search_gui.DEFAULT_PORT
+        open_browser = True
+        args = sys.argv[2:]
+        i = 0
+        while i < len(args):
+            if args[i] == "--port" and i + 1 < len(args):
+                try:
+                    port = int(args[i + 1])
+                except ValueError:
+                    print(f"  Ungültiger Port: {args[i + 1]}")
+                    return
+                i += 2
+            elif args[i] == "--no-browser":
+                open_browser = False
+                i += 1
+            else:
+                print(f"  Unbekannte Option: {args[i]}")
+                return
+        search_gui.run(port=port, open_browser=open_browser)
 
     elif cmd == "get":
         name = sys.argv[2] if len(sys.argv) > 2 else ""

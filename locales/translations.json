@@ -85,6 +85,14 @@
     "ja": "",
     "ru": ""
   },
+  "cmd.gui": {
+    "de": "Such-GUI im Browser (lokal, read-only)",
+    "en": "Search GUI in the browser (local, read-only)",
+    "es": "",
+    "zh": "",
+    "ja": "",
+    "ru": ""
+  },
   "cmd.get": {
     "de": "Eintrag lesen",
     "en": "Read entry",

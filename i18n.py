@@ -26,6 +26,10 @@ _BUILTIN_TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "help.heap": {"de": "Halde", "en": "Heap"},
     "help.files": {"de": "Dateien", "en": "files"},
     "cmd.find": {"de": "Suche", "en": "Search"},
+    "cmd.gui": {
+        "de": "Such-GUI im Browser (lokal, read-only)",
+        "en": "Search GUI in the browser (local, read-only)",
+    },
     "cmd.get": {"de": "Eintrag lesen", "en": "Read entry"},
     "cmd.put": {"de": "Eintrag schreiben", "en": "Write entry"},
     "cmd.run": {"de": "Tool ausführen", "en": "Run tool"},
