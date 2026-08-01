@@ -488,6 +488,67 @@ class TestAgentTranscriptSource(ObserveSourceTestCase):
         result = self.af.observe_sources("roleless")
         self.assertEqual(result["roleless"]["indexed"], 0)
         self.assertEqual(self.af.find("Rolle"), [])
+    def test_gemini_antigravity_format_preset(self):
+        jsonl_path = self.foreign / "transcript.jsonl"
+        self._write_jsonl(jsonl_path, [
+            {"step_index": 0, "source": "USER_EXPLICIT", "type": "USER_INPUT",
+             "content": "Bitte Analyse für Datenbank erstellen.", "created_at": "2026-08-01T10:00:00Z"},
+            {"step_index": 1, "source": "MODEL", "type": "PLANNER_RESPONSE",
+             "content": "Ich habe die Datenbank analysiert und bereinigt.", "created_at": "2026-08-01T10:00:05Z"},
+        ])
+
+        self.af.observe_source_add(
+            "gemini-transcripts", "agent_transcripts", path=str(jsonl_path),
+            format="gemini_antigravity",
+        )
+        result = self.af.observe_sources("gemini-transcripts")
+        self.assertEqual(result["gemini-transcripts"]["indexed"], 2)
+        hits = self.af.find("Datenbank")
+        self.assertEqual(len(hits), 2)
+        roles = {h["meta"]["source_ref"]["role"] for h in hits}
+        self.assertEqual(roles, {"user", "assistant"})
+
+    def test_codex_format_preset(self):
+        history_path = self.foreign / "codex-history.jsonl"
+        session_path = self.foreign / "rollout-session.jsonl"
+        
+        self._write_jsonl(history_path, [
+            {"session_id": "codex-s1", "ts": 1780794418, "text": "Teste bitte den Code-Refactoring-Schritt."}
+        ])
+        self._write_jsonl(session_path, [
+            {"timestamp": "2026-04-15T22:11:28.282Z", "type": "response_item",
+             "payload": {"type": "message", "role": "assistant",
+                         "content": [{"type": "text", "text": "Refactoring-Schritt wurde erfolgreich ausgeführt."}]}}
+        ])
+
+        self.af.observe_source_add(
+            "codex-transcripts", "agent_transcripts", path=str(self.foreign / "*codex*.jsonl"),
+            format="codex",
+        )
+        self.af.observe_source_add(
+            "codex-sessions", "agent_transcripts", path=str(self.foreign / "*rollout*.jsonl"),
+            format="codex",
+        )
+        res1 = self.af.observe_sources("codex-transcripts")
+        res2 = self.af.observe_sources("codex-sessions")
+        self.assertEqual(res1["codex-transcripts"]["indexed"], 1)
+        self.assertEqual(res2["codex-sessions"]["indexed"], 1)
+        self.assertEqual(len(self.af.find("Refactoring")), 2)
+
+    def test_kimi_format_preset(self):
+        wire_path = self.foreign / "wire.jsonl"
+        self._write_jsonl(wire_path, [
+            {"timestamp": 1781379142.4102, "message": {"type": "TurnBegin", "payload": {"user_input": "Starte Kimi Integrationstest."}}},
+            {"role": "assistant", "content": "Kimi Integrationstest läuft jetzt."},
+        ])
+
+        self.af.observe_source_add(
+            "kimi-transcripts", "agent_transcripts", path=str(wire_path),
+            format="kimi",
+        )
+        result = self.af.observe_sources("kimi-transcripts")
+        self.assertEqual(result["kimi-transcripts"]["indexed"], 2)
+        self.assertEqual(len(self.af.find("Integrationstest")), 2)
 
 
 class TestFederatedSearchAndCrud(ObserveSourceTestCase):

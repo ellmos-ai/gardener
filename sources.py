@@ -429,6 +429,98 @@ def _extract_generic_text(entry: Dict, role_field: str, text_field: str,
     return role, text
 
 
+def _extract_gemini_antigravity_text(entry: Dict):
+    """Extracts (role, text) from a Gemini Antigravity transcript JSONL line."""
+    if not isinstance(entry, dict):
+        return None, None
+    tp = entry.get("type")
+    src = entry.get("source")
+
+    # User input turn
+    if tp == "USER_INPUT" or src == "USER_EXPLICIT":
+        role = "user"
+        content = entry.get("content")
+        if isinstance(content, str):
+            text = content.strip()
+        else:
+            text = ""
+        return (role, text) if text else (None, None)
+
+    # Planner / assistant turn
+    if tp == "PLANNER_RESPONSE" or src == "MODEL":
+        role = "assistant"
+        content = entry.get("content")
+        if isinstance(content, str) and content.strip():
+            text = content.strip()
+        else:
+            thinking = entry.get("thinking")
+            if isinstance(thinking, str) and thinking.strip():
+                text = thinking.strip()
+            else:
+                text = ""
+        return (role, text) if text else (None, None)
+
+    return None, None
+
+
+def _extract_codex_text(entry: Dict):
+    """Extracts (role, text) from a Codex history or session JSONL line."""
+    if not isinstance(entry, dict):
+        return None, None
+
+    # 1. Simple history entry: {"session_id": ..., "ts": ..., "text": ...}
+    if "text" in entry and isinstance(entry["text"], str) and "session_id" in entry:
+        return "user", entry["text"].strip()
+
+    # 2. Session rollout item: {"payload": {"role": "user"|"assistant", "content": ...}}
+    payload = entry.get("payload")
+    if isinstance(payload, dict):
+        role = payload.get("role")
+        if role in ("user", "assistant"):
+            content = payload.get("content")
+            if isinstance(content, str):
+                text = content.strip()
+            elif isinstance(content, list):
+                parts = []
+                for block in content:
+                    if isinstance(block, dict):
+                        b_type = block.get("type")
+                        if b_type in ("input_text", "text", "output_text"):
+                            b_text = block.get("text", "")
+                            if isinstance(b_text, str) and b_text.strip():
+                                parts.append(b_text.strip())
+                text = "\n".join(parts).strip()
+            else:
+                text = ""
+            return (role, text) if text else (None, None)
+
+    return None, None
+
+
+def _extract_kimi_text(entry: Dict):
+    """Extracts (role, text) from a Kimi wire/session JSONL line."""
+    if not isinstance(entry, dict):
+        return None, None
+
+    # TurnBegin wrapper
+    msg = entry.get("message")
+    if isinstance(msg, dict):
+        m_type = msg.get("type")
+        payload = msg.get("payload")
+        if m_type == "TurnBegin" and isinstance(payload, dict):
+            u_input = payload.get("user_input")
+            if isinstance(u_input, str) and u_input.strip():
+                return "user", u_input.strip()
+
+    # Direct role/content format
+    role = entry.get("role")
+    content = entry.get("content")
+    if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+        return role, content.strip()
+
+    return None, None
+
+
 def scan_agent_transcripts(source_id: str, config: Dict,
                             state: Optional[Dict] = None) -> Iterator[SourceItem]:
     """JSONL chat-transcript files, indexed line by line, text turns only.
@@ -436,8 +528,8 @@ def scan_agent_transcripts(source_id: str, config: Dict,
     config:
         path: glob pattern for the JSONL files (e.g.
               '~/.claude/projects/*/**/*.jsonl'); '**' is recursive.
-        format: 'claude_code' (default, built-in field mapping) or
-              'generic' (uses role_field/text_field below).
+        format: 'claude_code' (default), 'gemini_antigravity', 'codex',
+              'kimi', or 'generic' (uses role_field/text_field below).
         roles: which roles to index (default: ["user", "assistant"]).
         include_sidechain: index Claude Code sub-agent sidechain turns
               too (default: False -- only the main conversation).
@@ -519,6 +611,12 @@ def scan_agent_transcripts(source_id: str, config: Dict,
                         if not include_sidechain and entry.get("isSidechain"):
                             continue
                         role, text = _extract_claude_code_text(entry)
+                    elif fmt in ("gemini_antigravity", "antigravity", "gemini"):
+                        role, text = _extract_gemini_antigravity_text(entry)
+                    elif fmt == "codex":
+                        role, text = _extract_codex_text(entry)
+                    elif fmt == "kimi":
+                        role, text = _extract_kimi_text(entry)
                     else:
                         role, text = _extract_generic_text(
                             entry, role_field, text_field, text_block_type,
@@ -527,8 +625,21 @@ def scan_agent_transcripts(source_id: str, config: Dict,
                     if role is None or role not in roles:
                         continue
 
-                    item_key = entry.get("uuid") or f"L{line_no}"
-                    session = entry.get("sessionId", file_path.stem)
+                    uuid_val = entry.get("uuid") or entry.get("turn_id")
+                    if not uuid_val and isinstance(entry.get("payload"), dict):
+                        uuid_val = entry["payload"].get("id") or entry["payload"].get("turn_id")
+                    item_key = uuid_val if uuid_val else (f"step_{entry['step_index']}" if isinstance(entry, dict) and "step_index" in entry else f"L{line_no}")
+
+                    session_val = entry.get("sessionId") or entry.get("session_id")
+                    if not session_val and isinstance(entry.get("payload"), dict):
+                        session_val = entry["payload"].get("id")
+                    session = str(session_val) if session_val else file_path.stem
+
+                    ts_val = entry.get("timestamp") or entry.get("created_at") or entry.get("ts")
+                    if not ts_val and isinstance(entry.get("payload"), dict):
+                        ts_val = entry["payload"].get("timestamp") or entry["payload"].get("started_at")
+                    timestamp = str(ts_val) if ts_val is not None else ""
+
                     yield SourceItem(
                         key=f"{file_key}#{item_key}",
                         name=(f"observed/{source_id}/"
@@ -542,9 +653,9 @@ def scan_agent_transcripts(source_id: str, config: Dict,
                                 "line": line_no,
                                 "role": role,
                                 "session": session,
-                                "uuid": entry.get("uuid"),
+                                "uuid": uuid_val,
                             },
-                            "timestamp": entry.get("timestamp", ""),
+                            "timestamp": timestamp,
                         },
                         fingerprint=hashlib.sha256(
                             text.encode("utf-8", "replace")

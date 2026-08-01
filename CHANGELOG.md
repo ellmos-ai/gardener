@@ -101,6 +101,17 @@
     search/entry/status endpoints, type filter, 404 handling, read-only
     enforcement. Suite verified at 50/50 passing.
 
+## 2026-08-01 (multi-agent transcripts)
+
+- **Multi-Agent Transcript Format Support**:
+  - Added native format extractor presets for **Gemini Antigravity** (`gemini_antigravity`), **Codex** (`codex`), and **Kimi** (`kimi`) in `scan_agent_transcripts` (`sources.py`).
+  - Added support for indexing Gemini transcript logs (`~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl`), Codex session & history JSONLs (`~/.codex/history.jsonl`, `~/.codex/archived_sessions/*.jsonl`), and Kimi wire transcripts (`~/.kimi/sessions/*/*/wire.jsonl`).
+  - Extended metadata mapping (`session`, `uuid`, `timestamp`, `step_index`) across all supported agent formats while retaining 100% backward compatibility for `claude_code` and `generic`.
+  - Added 3 new unit tests in `test_observe_sources.py` (`test_gemini_antigravity_format_preset`, `test_codex_format_preset`, `test_kimi_format_preset`).
+  - Suite nach Integration in den aktuellen Stand: 64 -> 67 grün. (Die Arbeit
+    entstand parallel auf einem OneDrive-Checkout gegen einen 42er-Stand und
+    wurde am 2026-08-01 im Zuge der Plan-D-Migration hierher übernommen.)
+
 ## 2026-07-30
 
 - **Multi-Word Query UX Improvement & FTS5 BM25 Ranking**:
