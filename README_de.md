@@ -19,7 +19,7 @@
 
 ## Was ist Gardener?
 
-Ein Betriebssystem das für LLMs gebaut ist. Alles lebt in einer durchsuchbaren
+Ein Betriebssystem, das für LLMs gebaut ist. Alles lebt in einer durchsuchbaren
 Datenbank. Vier Funktionen reichen für alles.
 
 ## Suchkontext
@@ -37,17 +37,17 @@ LLM-Agenten: eine `everything`-Tabelle, FTS5-Suche und die vier Primitive
 from gardener import Gardener
 af = Gardener()
 
-# Suchen
-af.find("steuer")
+# Search
+af.find("taxes")
 
-# Lesen
-af.get("beleg-scanner")
+# Read
+af.get("receipt-scanner")
 
-# Schreiben
-af.put("notiz", content="Wichtig!", type="memory", tags="todo")
+# Write
+af.put("note", content="Important!", type="memory", tags="todo")
 
-# Ausführen
-af.run("datei-info", input={"pfad": "/pfad/zur/datei"})
+# Execute
+af.run("file-info", input={"path": "/path/to/file"})
 ```
 
 ## CLI
@@ -58,7 +58,7 @@ python gardener.py gui [--port N] [--no-browser]
 python gardener.py get <name>
 python gardener.py put <name> <text>
 python gardener.py run <name>
-python gardener.py absorb <datei>
+python gardener.py absorb <file>
 python gardener.py materialize <name>
 python gardener.py sync
 python gardener.py observe
@@ -85,28 +85,28 @@ streng read-only gegenüber beiden Datenbanken.
 
 ```
 Gardener/
-  gardener.py          # Kern: Gardener-Klasse + CLI
-  sources.py           # Read-only-Adapter für beobachtete Fremdquellen
-  seed.py              # Initiales Systemwissen
-  i18n.py              # Nachschlagen der CLI-Texte
-  locales/             # Übersetzungskatalog für die CLI-Texte
-  tests/               # unittest-Suite (auch mit pytest lauffähig)
-  KONZEPT.md           # Designdokumentation
-  README.md            # Diese Datei
-  workspace/           # Materialisierter Code zur Ausführung
-  blobs/               # Halde für große Dateien (>50MB)
+  gardener.py          # Core: Gardener class + CLI
+  sources.py           # Read-only adapters for observed foreign sources
+  seed.py              # Initial system knowledge
+  i18n.py              # CLI string lookup
+  locales/             # Translation catalogue for CLI strings
+  tests/               # unittest suite (also runnable with pytest)
+  KONZEPT.md           # Design documentation (German)
+  README.md            # This file
+  workspace/           # Materialized code for execution
+  blobs/               # Storage for large files (>50MB)
 
-Lokal (nicht in Cloud, überschreibbar mit GARDENER_DATA):
+Local (not in cloud, override with GARDENER_DATA):
   ~/.gardener/
-    gardener.db        # System: Wissen, Tools, Blaupausen
-    user.db           # User: Memory, Tasks, persönliche Daten
-    blobs/            # Große Dateien
+    gardener.db        # System: Knowledge, tools, blueprints
+    user.db            # User: Memory, tasks, personal data
+    blobs/             # Large files
 
-User-Ordner (Cloud ok, überschreibbar mit GARDENER_HOME):
+User directory (cloud ok, override with GARDENER_HOME):
   ~/gardener/
-    .absorber/        # Dateien hier → automatisch in DB absorbiert
-    .output/          # Materialisierte Dateien erscheinen hier
-    dokumente/        # Beobachtete Dateien (LLM liest mit)
+    .absorber/         # Files here → automatically absorbed into DB
+    .output/           # Materialized files appear here
+    documents/         # Observed files (LLM reads along)
 ```
 
 ## Datenmodell
@@ -130,19 +130,19 @@ Statt 5 Tabellen: alles in `everything` mit Typen und Meta-Feldern.
 Die FTS5-Suche IST das assoziative Gedächtnis.
 
 ```python
-af.memo("Kurznotiz")                    # Working Memory (verfällt schnell)
-af.lesson("Titel", "Erkenntnis")        # Best Practice (verfällt kaum)
-af.session_end("Zusammenfassung")       # Session-Bericht
-af.recall("steuer")                     # Erinnern (sucht + boosted Gewicht)
-af.consolidate()                        # Schlaf: Decay + Forget
+af.memo("Quick note")                    # Working memory (decays fast)
+af.lesson("Title", "Insight")            # Best practice (barely decays)
+af.session_end("Summary")               # Session report
+af.recall("taxes")                       # Remember (searches + boosts weight)
+af.consolidate()                         # Sleep: Decay + Forget
 ```
 
 ```bash
-gardener memo <text>            # Notiz
-gardener lesson <titel> [text]  # Lektion
-gardener recall <query>         # Erinnern
-gardener consolidate            # Konsolidieren
-gardener session-end <text>     # Session beenden
+gardener memo <text>            # Note
+gardener lesson <title> [text]  # Lesson
+gardener recall <query>         # Remember
+gardener consolidate            # Consolidate
+gardener session-end <text>     # End session
 ```
 
 Details: [KONZEPT.md#memory](KONZEPT.md#memory-kein-separates-gedächtnis-system-design-entscheidung)
@@ -153,16 +153,16 @@ Tasks sind Einträge vom Typ `task` in der `everything`-Tabelle. **Kein separate
 Task-System nötig.** `find("steuer")` findet Wissen UND Tasks gleichzeitig.
 
 ```python
-af.task("steuer-2025", content="Einreichen", priority="high", due="2026-05-31")
-af.tasks()                     # Alle Tasks
-af.tasks(status="open")        # Nur offene
-af.task_done("steuer-2025")    # Erledigt
+af.task("taxes-2025", content="File return", priority="high", due="2026-05-31")
+af.tasks()                     # All tasks
+af.tasks(status="open")        # Open only
+af.task_done("taxes-2025")     # Mark done
 ```
 
 ```bash
-gardener task <name> [text]     # Erstellen
-gardener tasks [status]         # Auflisten
-gardener done <name>            # Erledigt
+gardener task <name> [text]     # Create
+gardener tasks [status]         # List
+gardener done <name>            # Mark done
 ```
 
 Details: [KONZEPT.md#tasks](KONZEPT.md#tasks-kein-separates-system-design-entscheidung)
@@ -176,8 +176,8 @@ Details: [KONZEPT.md#tasks](KONZEPT.md#tasks-kein-separates-system-design-entsch
 ## Transporter
 
 ```python
-af.absorb("/pfad/zur/datei.pdf")   # Datei → DB (dematerialisieren)
-af.materialize("datei.pdf")         # DB → Datei (rematerialisieren)
+af.absorb("/path/to/file.pdf")     # File → DB (dematerialize)
+af.materialize("file.pdf")          # DB → File (rematerialize)
 ```
 
 ## Cross-Source Federated Index
@@ -203,20 +203,20 @@ Vier Quellenarten:
 | `agent_transcripts` | JSONL-Chat-Transkripte, zeilenweise indexiert, **nur Text-Turns** (Tool-Aufrufe/-Ergebnisse und interne „Thinking"-Blöcke werden übersprungen). Bringt ein eingebautes Feld-Mapping für Claude Codes eigenes Transkriptformat mit; jedes andere zeilenbasierte JSON-Transkript lässt sich über ein generisches Dotted-Path-Role/Text-Mapping indexieren. `default_role` deckt Archive mit nur einer Rolle ab, die gar kein Rollenfeld führen — etwa eine reine Prompt-Historie. Große, wachsende Dateien werden ab einem gespeicherten Byte-Offset weitergelesen — ein Refresh liest nie erneut, was schon indexiert wurde. | `path` (Glob, `**` rekursiv), `format` (`claude_code` Default, oder `generic` mit `role_field`/`text_field`/`default_role`) |
 
 ```bash
-# Claude-Code-Projekt-Memories dieses Rechners indexieren
+# Index this machine's Claude Code project memories
 gardener observe-source add claude-memories markdown_dir path="~/.claude/projects/*/memory"
 
-# .remember-Notizen irgendwo unterhalb einer Wurzel indexieren
+# Index .remember notes anywhere below a root
 gardener observe-source add notes remember_files path="~/notes"
 
-# Eine Tabelle in einer fremden, lesend geoeffneten SQLite-DB indexieren
+# Index a table in a foreign, read-only SQLite database
 gardener observe-source add tasks-db sqlite_table db_path="~/.some-tool/tool.db" table=tasks
 
-# Claude-Code-Transkripte indexieren (Hauptgespraech, nur Text-Turns)
+# Index Claude Code transcripts (main conversation, text turns only)
 gardener observe-source add claude-transcripts agent_transcripts path="~/.claude/projects/*/**/*.jsonl"
 
 gardener observe-source list
-gardener observe-source refresh              # alle Quellen
+gardener observe-source refresh              # all sources
 gardener observe-source refresh claude-memories
 gardener observe-source remove claude-memories
 ```
@@ -224,11 +224,11 @@ gardener observe-source remove claude-memories
 ```python
 af.observe_source_add("claude-memories", "markdown_dir",
                        path="~/.claude/projects/*/memory")
-af.observe_sources()                          # alle konfigurierten Quellen aktualisieren
-af.find("steuer")                              # eigene Eintraege + beobachtete Treffer, eine Anfrage
+af.observe_sources()                          # refresh all configured sources
+af.find("taxes")                              # own entries + observed hits, one query
 
-# Listen-wertige Config wie `patterns` braucht die Python-API -- die CLI-
-# Form key=value akzeptiert nur Strings, kein JSON.
+# List-valued config like `patterns` needs the Python API -- the CLI's
+# plain key=value form only accepts strings, not JSON.
 af.observe_source_add("mixed-notes", "markdown_dir",
                        path="~/notes", patterns=["*.md", "*.txt"])
 ```
@@ -245,18 +245,18 @@ Die vier Arten genügen, um jeden Agenten auf einer Maschine in dieselbe
 Suche zu holen — unabhängig davon, was er als Speicher benutzt:
 
 ```python
-# Markdown-Memories und Regeldateien (Codex, Gemini, ...)
+# Markdown memories and rule files (Codex, Gemini, ...)
 af.observe_source_add("codex-memories", "markdown_dir", path="~/.codex/memories")
 af.observe_source_add("gemini-rules", "markdown_dir", path="~/.gemini",
                        patterns=["GEMINI.md", "memory.md", "memory.txt"])
 
-# Eine Prompt-Historie ohne Rollenfeld je Zeile
+# A prompt history with no role field per line
 af.observe_source_add("kimi-prompts", "agent_transcripts",
                        path="~/.kimi-code/user-history/*.jsonl",
                        format="generic", text_field="content",
                        default_role="user")
 
-# Eine kuratierte Memory-Datenbank, lesend, Problem+Loesung in einem Eintrag
+# A curated memory database, read-only, problem+solution in one entry
 af.observe_source_add("usmc-lessons", "sqlite_table",
                        db_path="~/.usmc/usmc_memory.db", table="usmc_lessons",
                        columns={"id": "id", "name": "title",
@@ -272,7 +272,7 @@ nicht überschwemmt.
 ## Seeding
 
 ```bash
-python seed.py    # Füllt gardener.db mit Grundwissen und Beispiel-Tools
+python seed.py    # Populates gardener.db with base knowledge and example tools
 ```
 
 ## Vergleich: Gardener vs Rinnsal
@@ -344,3 +344,13 @@ vertraut wie eigenem Code.
 ## Konzept
 
 Ausführliche Designdokumentation: [KONZEPT.md](KONZEPT.md)
+
+---
+
+## Haftung / Liability
+
+Dieses Projekt ist eine **unentgeltliche Open-Source-Schenkung** im Sinne der §§ 516 ff. BGB. Die Haftung des Urhebers ist gemäß **§ 521 BGB** auf **Vorsatz und grobe Fahrlässigkeit** beschränkt. Ergänzend gelten die Haftungsausschlüsse aus GPL-3.0 / MIT / Apache-2.0 §§ 15–16 (je nach gewählter Lizenz).
+
+Nutzung auf eigenes Risiko. Keine Wartungszusage, keine Verfügbarkeitsgarantie, keine Gewähr für Fehlerfreiheit oder Eignung für einen bestimmten Zweck.
+
+This project is an unpaid open-source donation. Liability is limited to intent and gross negligence (§ 521 German Civil Code). Use at your own risk. No warranty, no maintenance guarantee, no fitness-for-purpose assumed.
