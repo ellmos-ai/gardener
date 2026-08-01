@@ -2,6 +2,9 @@
 
 ## 2026-08-01
 
+- **README language parity:** Synchronized `README_de.md` with the canonical
+  English structure and restored byte-identical code blocks across the
+  maintained EN/DE pair.
 - **Every agent's memory in one search**: the observe-source layer now covers
   the other coding agents on the machine, not just Claude Code. Newly indexed
   (all read-only, originals untouched): Codex/GPT memories and rule file
