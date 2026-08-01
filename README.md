@@ -9,7 +9,7 @@
 [![Gardener tests](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml/badge.svg)](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests: 50 passed](https://img.shields.io/badge/tests-50%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
+[![Tests: 54 passed](https://img.shields.io/badge/tests-54%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
 [![LLM OS](https://img.shields.io/badge/LLM--OS-SQLite%20Substrate-blueviolet.svg)](https://github.com/ellmos-ai/gardener)
 
 > [!NOTE]
@@ -198,8 +198,8 @@ Four source kinds:
 |------|------------------|------------|
 | `markdown_dir` | A directory of markdown files, one entry per file. The `path` may itself be a glob spanning several directories (e.g. a per-project memory convention). `patterns` widens this to other file kinds (e.g. `.txt` notes). | `path`, `patterns` (list, default `["*.md"]`), `glob` (single-pattern legacy alias) |
 | `remember_files` | Small note files anywhere below a root, found via a recursive glob. | `path`, `glob` (default `**/.remember`) |
-| `sqlite_table` | A single table in a foreign SQLite database, opened strictly read-only (`mode=ro`). Column names are whitelisted against the live schema before use. | `db_path`, `table`, `columns` (`content` required; `id`/`name`/`tags` optional) |
-| `agent_transcripts` | JSONL chat transcripts, indexed line by line, **text turns only** (tool calls/results and internal "thinking" blocks are skipped). Ships a built-in field mapping for Claude Code's own transcript format; any other line-based JSON transcript can be indexed via a generic dotted-path role/text mapping. Large, growing files are tailed from a saved byte offset — a refresh never re-reads what it already indexed. | `path` (glob, `**` recurses), `format` (`claude_code` default, or `generic` with `role_field`/`text_field`) |
+| `sqlite_table` | A single table in a foreign SQLite database, opened strictly read-only (`mode=ro`). Column names are whitelisted against the live schema before use. `content` may name several columns, joined in order — a row whose meaning is split across two text fields (a lesson's problem *and* its solution) stays fully searchable. | `db_path`, `table`, `columns` (`content` required, string or list; `id`/`name`/`tags` optional) |
+| `agent_transcripts` | JSONL chat transcripts, indexed line by line, **text turns only** (tool calls/results and internal "thinking" blocks are skipped). Ships a built-in field mapping for Claude Code's own transcript format; any other line-based JSON transcript can be indexed via a generic dotted-path role/text mapping. `default_role` covers single-role archives that carry no role field at all, such as a bare prompt history. Large, growing files are tailed from a saved byte offset — a refresh never re-reads what it already indexed. | `path` (glob, `**` recurses), `format` (`claude_code` default, or `generic` with `role_field`/`text_field`/`default_role`) |
 
 ```bash
 # Index this machine's Claude Code project memories
@@ -237,6 +237,36 @@ foreign table without Gardener knowing its schema in advance — e.g. a
 task or notes table kept by a different local tool. Configuration lives
 in `config.json` under `observe_sources`; nothing here is hardcoded to a
 specific machine or tool.
+
+### Indexing several coding agents at once
+
+The four kinds are enough to put every agent on a machine into one
+search, whatever each of them happens to use as storage:
+
+```python
+# Markdown memories and rule files (Codex, Gemini, ...)
+af.observe_source_add("codex-memories", "markdown_dir", path="~/.codex/memories")
+af.observe_source_add("gemini-rules", "markdown_dir", path="~/.gemini",
+                       patterns=["GEMINI.md", "memory.md", "memory.txt"])
+
+# A prompt history with no role field per line
+af.observe_source_add("kimi-prompts", "agent_transcripts",
+                       path="~/.kimi-code/user-history/*.jsonl",
+                       format="generic", text_field="content",
+                       default_role="user")
+
+# A curated memory database, read-only, problem+solution in one entry
+af.observe_source_add("usmc-lessons", "sqlite_table",
+                       db_path="~/.usmc/usmc_memory.db", table="usmc_lessons",
+                       columns={"id": "id", "name": "title",
+                                "content": ["problem", "solution"],
+                                "tags": "category"})
+```
+
+Everything indexed this way is `observed` — foreign material, reachable
+through `find()`. It deliberately does not become `memory`/`lesson`, the
+types `recall()` draws on, so that bulk material cannot drown out the
+entries that were curated on purpose.
 
 ## Seeding
 

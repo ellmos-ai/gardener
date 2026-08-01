@@ -7,7 +7,7 @@
 [![Gardener tests](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml/badge.svg)](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests: 50 passed](https://img.shields.io/badge/tests-50%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
+[![Tests: 54 passed](https://img.shields.io/badge/tests-54%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
 [![LLM OS](https://img.shields.io/badge/LLM--OS-SQLite%20Substrate-blueviolet.svg)](https://github.com/ellmos-ai/gardener)
 
 > [!NOTE]
@@ -199,8 +199,8 @@ Vier Quellenarten:
 |---|---|---|
 | `markdown_dir` | Ein Verzeichnis mit Markdown-Dateien, ein Eintrag pro Datei. `path` darf selbst ein Glob sein, das mehrere Verzeichnisse abdeckt (z. B. eine Pro-Projekt-Memory-Konvention). `patterns` erweitert dies auf andere Dateiarten (z. B. `.txt`-Notizen). | `path`, `patterns` (Liste, Default `["*.md"]`), `glob` (einzelnes Muster, veralteter Alias) |
 | `remember_files` | Kleine Notiz-Dateien irgendwo unterhalb einer Wurzel, gefunden über rekursives Glob. | `path`, `glob` (Default `**/.remember`) |
-| `sqlite_table` | Eine einzelne Tabelle in einer fremden SQLite-Datenbank, streng lesend geöffnet (`mode=ro`). Spaltennamen werden vor Nutzung gegen das echte Schema geprüft (Whitelist). | `db_path`, `table`, `columns` (`content` Pflicht; `id`/`name`/`tags` optional) |
-| `agent_transcripts` | JSONL-Chat-Transkripte, zeilenweise indexiert, **nur Text-Turns** (Tool-Aufrufe/-Ergebnisse und interne „Thinking"-Blöcke werden übersprungen). Bringt ein eingebautes Feld-Mapping für Claude Codes eigenes Transkriptformat mit; jedes andere zeilenbasierte JSON-Transkript lässt sich über ein generisches Dotted-Path-Role/Text-Mapping indexieren. Große, wachsende Dateien werden ab einem gespeicherten Byte-Offset weitergelesen — ein Refresh liest nie erneut, was schon indexiert wurde. | `path` (Glob, `**` rekursiv), `format` (`claude_code` Default, oder `generic` mit `role_field`/`text_field`) |
+| `sqlite_table` | Eine einzelne Tabelle in einer fremden SQLite-Datenbank, streng lesend geöffnet (`mode=ro`). Spaltennamen werden vor Nutzung gegen das echte Schema geprüft (Whitelist). `content` darf mehrere Spalten benennen, die der Reihe nach zusammengefügt werden — eine Zeile, deren Sinn auf zwei Textfelder verteilt ist (das Problem *und* die Lösung einer Lesson), bleibt so vollständig durchsuchbar. | `db_path`, `table`, `columns` (`content` Pflicht, String oder Liste; `id`/`name`/`tags` optional) |
+| `agent_transcripts` | JSONL-Chat-Transkripte, zeilenweise indexiert, **nur Text-Turns** (Tool-Aufrufe/-Ergebnisse und interne „Thinking"-Blöcke werden übersprungen). Bringt ein eingebautes Feld-Mapping für Claude Codes eigenes Transkriptformat mit; jedes andere zeilenbasierte JSON-Transkript lässt sich über ein generisches Dotted-Path-Role/Text-Mapping indexieren. `default_role` deckt Archive mit nur einer Rolle ab, die gar kein Rollenfeld führen — etwa eine reine Prompt-Historie. Große, wachsende Dateien werden ab einem gespeicherten Byte-Offset weitergelesen — ein Refresh liest nie erneut, was schon indexiert wurde. | `path` (Glob, `**` rekursiv), `format` (`claude_code` Default, oder `generic` mit `role_field`/`text_field`/`default_role`) |
 
 ```bash
 # Claude-Code-Projekt-Memories dieses Rechners indexieren
@@ -238,6 +238,36 @@ fremde Tabelle zu zeigen, ohne dass Gardener ihr Schema vorher kennt —
 z. B. eine Task- oder Notiz-Tabelle eines anderen lokalen Werkzeugs. Die
 Konfiguration liegt in `config.json` unter `observe_sources`; nichts hier
 ist auf eine konkrete Maschine oder ein konkretes Werkzeug festverdrahtet.
+
+### Mehrere Coding-Agenten gemeinsam indexieren
+
+Die vier Arten genügen, um jeden Agenten auf einer Maschine in dieselbe
+Suche zu holen — unabhängig davon, was er als Speicher benutzt:
+
+```python
+# Markdown-Memories und Regeldateien (Codex, Gemini, ...)
+af.observe_source_add("codex-memories", "markdown_dir", path="~/.codex/memories")
+af.observe_source_add("gemini-rules", "markdown_dir", path="~/.gemini",
+                       patterns=["GEMINI.md", "memory.md", "memory.txt"])
+
+# Eine Prompt-Historie ohne Rollenfeld je Zeile
+af.observe_source_add("kimi-prompts", "agent_transcripts",
+                       path="~/.kimi-code/user-history/*.jsonl",
+                       format="generic", text_field="content",
+                       default_role="user")
+
+# Eine kuratierte Memory-Datenbank, lesend, Problem+Loesung in einem Eintrag
+af.observe_source_add("usmc-lessons", "sqlite_table",
+                       db_path="~/.usmc/usmc_memory.db", table="usmc_lessons",
+                       columns={"id": "id", "name": "title",
+                                "content": ["problem", "solution"],
+                                "tags": "category"})
+```
+
+Alles so Indexierte ist `observed` — fremdes Material, erreichbar über
+`find()`. Es wird bewusst nicht zu `memory`/`lesson`, den Typen, aus denen
+`recall()` schöpft, damit Massenmaterial die bewusst kuratierten Einträge
+nicht überschwemmt.
 
 ## Seeding
 

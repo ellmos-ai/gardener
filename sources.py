@@ -211,11 +211,24 @@ def scan_sqlite_table(source_id: str, config: Dict) -> Iterator[SourceItem]:
                   "tags": "<col>"} -- 'content' is required, the rest
                   are optional. Table/column names are whitelisted
                   against the live schema before use in SQL.
+
+                  'content' may also be a LIST of columns, joined with
+                  blank lines in the given order. Rows whose meaning is
+                  split across several text columns (a lesson's problem
+                  AND its solution, say) would otherwise only be half
+                  searchable -- whichever column was not chosen simply
+                  would not be in the index.
     """
     db_path = os.path.expanduser(str(config.get("db_path", "")))
     table = str(config.get("table", ""))
     columns = config.get("columns") or {}
     if not db_path or not table or "content" not in columns:
+        return
+    raw_content = columns.get("content")
+    content_cols = (list(raw_content) if isinstance(raw_content, (list, tuple))
+                    else [raw_content])
+    content_cols = [c for c in content_cols if c]
+    if not content_cols:
         return
     db_file = Path(db_path)
     if not db_file.is_file():
@@ -235,11 +248,10 @@ def scan_sqlite_table(source_id: str, config: Dict) -> Iterator[SourceItem]:
 
         id_col = columns.get("id")
         name_col = columns.get("name")
-        content_col = columns.get("content")
         tags_col = columns.get("tags")
 
         select_cols = ["rowid"]
-        for col in (id_col, name_col, content_col, tags_col):
+        for col in [id_col, name_col, *content_cols, tags_col]:
             if col and col not in valid_columns:
                 # A configured column that doesn't exist is a config
                 # error -- refuse rather than silently drop it.
@@ -262,8 +274,12 @@ def scan_sqlite_table(source_id: str, config: Dict) -> Iterator[SourceItem]:
 
     for row in rows:
         row_id = row[col_pos[id_col]] if id_col else row[0]
-        content = row[col_pos[content_col]] if content_col else ""
-        content = "" if content is None else str(content)
+        parts = []
+        for col in content_cols:
+            value = row[col_pos[col]]
+            if value is not None and str(value).strip():
+                parts.append(str(value))
+        content = "\n\n".join(parts)
         display_name = (row[col_pos[name_col]]
                          if name_col and row[col_pos[name_col]] else str(row_id))
         tags_value = (row[col_pos[tags_col]]
@@ -346,13 +362,20 @@ def _extract_claude_code_text(entry: Dict):
 
 
 def _extract_generic_text(entry: Dict, role_field: str, text_field: str,
-                           text_block_type: str):
+                           text_block_type: str, default_role=None):
     """Generic dotted-path role/text extraction for JSONL transcript
     formats other than Claude Code's. `text_field` may point at a
     plain string, or a list of blocks (extracts blocks whose 'type'
     equals `text_block_type`, concatenated).
+
+    `default_role` covers single-role archives that carry no role field
+    at all -- e.g. a plain prompt history where every line is by
+    definition the user's. Without it such a file indexes nothing,
+    because an absent role never matches the `roles` filter.
     """
     role = _dig(entry, role_field)
+    if role is None:
+        role = default_role
     raw = _dig(entry, text_field)
 
     if isinstance(raw, str):
@@ -390,6 +413,10 @@ def scan_agent_transcripts(source_id: str, config: Dict,
               (default 'message.role' / 'message.content').
         text_block_type: block 'type' to extract when text_field
               resolves to a list of blocks (default 'text').
+        default_role: role to assume when a line carries no role field
+              (format 'generic' only). Needed for single-role archives
+              such as a bare prompt history; it must also appear in
+              `roles` to be indexed.
 
     `state` is a mutable dict (file_key -> {offset, mtime, size,
     line_no}) that this function reads AND updates in place so the
@@ -408,6 +435,7 @@ def scan_agent_transcripts(source_id: str, config: Dict,
     role_field = config.get("role_field", "message.role")
     text_field = config.get("text_field", "message.content")
     text_block_type = config.get("text_block_type", "text")
+    default_role = config.get("default_role")
 
     for file_str in sorted(glob.glob(path_pattern, recursive=True)):
         file_path = Path(file_str)
@@ -460,7 +488,8 @@ def scan_agent_transcripts(source_id: str, config: Dict,
                         role, text = _extract_claude_code_text(entry)
                     else:
                         role, text = _extract_generic_text(
-                            entry, role_field, text_field, text_block_type)
+                            entry, role_field, text_field, text_block_type,
+                            default_role)
 
                     if role is None or role not in roles:
                         continue

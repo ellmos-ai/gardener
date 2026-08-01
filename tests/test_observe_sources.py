@@ -224,6 +224,55 @@ class TestSqliteTableSource(ObserveSourceTestCase):
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0], 2)
         conn.close()
 
+    def test_content_list_indexes_every_named_column(self):
+        # A USMC/BACH-style lesson splits its meaning over two text
+        # columns; picking only one would leave the other unsearchable.
+        db_path = self.foreign / "lessons.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "CREATE TABLE lessons (id INTEGER PRIMARY KEY, title TEXT, "
+            "problem TEXT, solution TEXT)")
+        conn.execute(
+            "INSERT INTO lessons VALUES (?, ?, ?, ?)",
+            (1, "OneDrive-Sperre", "Verschieben scheitert an Cloud-Lock",
+             "FileCommander statt mv benutzen"),
+        )
+        conn.execute(  # NULL/empty column must not produce blank padding
+            "INSERT INTO lessons VALUES (?, ?, ?, ?)",
+            (2, "Nur-Problem", "Encoding kippt auf cp1252", None),
+        )
+        conn.commit()
+        conn.close()
+
+        self.af.observe_source_add(
+            "usmc-lessons", "sqlite_table", db_path=str(db_path),
+            table="lessons",
+            columns={"id": "id", "name": "title",
+                     "content": ["problem", "solution"]},
+        )
+        result = self.af.observe_sources("usmc-lessons")
+        self.assertEqual(result["usmc-lessons"]["indexed"], 2)
+
+        # Both halves of row 1 are findable, and land in the same entry.
+        by_problem = self.af.find("Cloud-Lock")
+        by_solution = self.af.find("FileCommander")
+        self.assertEqual(len(by_problem), 1)
+        self.assertEqual(len(by_solution), 1)
+        self.assertEqual(by_problem[0]["name"], by_solution[0]["name"])
+        self.assertIn("Verschieben scheitert", by_problem[0]["content"])
+        self.assertIn("statt mv benutzen", by_problem[0]["content"])
+
+        self.assertEqual(self.af.find("cp1252")[0]["content"].count("\n\n"), 1)
+
+    def test_content_list_refuses_unknown_column(self):
+        db_path = self._make_foreign_db()
+        self.af.observe_source_add(
+            "bad-cols", "sqlite_table", db_path=str(db_path), table="tasks",
+            columns={"id": "id", "content": ["body", "does_not_exist"]},
+        )
+        result = self.af.observe_sources("bad-cols")
+        self.assertEqual(result["bad-cols"]["indexed"], 0)
+
     def test_refresh_reindexes_only_changed_rows(self):
         db_path = self._make_foreign_db()
         self.af.observe_source_add(
@@ -359,6 +408,42 @@ class TestAgentTranscriptSource(ObserveSourceTestCase):
         result = self.af.observe_sources("other-agent")
         self.assertEqual(result["other-agent"]["indexed"], 2)
         self.assertEqual(len(self.af.find("Deployment")), 2)
+
+    def test_default_role_indexes_archive_without_role_field(self):
+        # A bare prompt history (Kimi's user-history format): every line
+        # is a user turn, no role field anywhere. Without default_role
+        # the roles filter would drop every single line.
+        jsonl_path = self.foreign / "prompt-history.jsonl"
+        self._write_jsonl(jsonl_path, [
+            {"content": "Bitte pruefe den Migrationsplan."},
+            {"content": "Und danach den Rollback-Pfad."},
+        ])
+
+        self.af.observe_source_add(
+            "prompt-history", "agent_transcripts", path=str(jsonl_path),
+            format="generic", text_field="content", default_role="user",
+        )
+        result = self.af.observe_sources("prompt-history")
+        self.assertEqual(result["prompt-history"]["indexed"], 2)
+
+        hits = self.af.find("Rollback-Pfad")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["meta"]["source_ref"]["role"], "user")
+
+    def test_missing_role_without_default_indexes_nothing(self):
+        # Same file, no default_role: the guard stays as before -- a line
+        # with no resolvable role is skipped rather than silently
+        # indexed under an invented role.
+        jsonl_path = self.foreign / "roleless.jsonl"
+        self._write_jsonl(jsonl_path, [{"content": "Text ohne Rolle."}])
+
+        self.af.observe_source_add(
+            "roleless", "agent_transcripts", path=str(jsonl_path),
+            format="generic", text_field="content",
+        )
+        result = self.af.observe_sources("roleless")
+        self.assertEqual(result["roleless"]["indexed"], 0)
+        self.assertEqual(self.af.find("Rolle"), [])
 
 
 class TestFederatedSearchAndCrud(ObserveSourceTestCase):

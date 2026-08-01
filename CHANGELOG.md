@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-08-01
+
+- **Every agent's memory in one search**: the observe-source layer now covers
+  the other coding agents on the machine, not just Claude Code. Newly indexed
+  (all read-only, originals untouched): Codex/GPT memories and rule file
+  (`codex-memories` 4, `codex-rollouts` 256 run summaries, `codex-rules` 1),
+  Gemini/Antigravity (`gemini-rules` 4, `gemini-antigravity` 3), Kimi's prompt
+  history (`kimi-prompts` 515), and the USMC memory database
+  (`usmc-facts` 9, `usmc-lessons` 8, `usmc-working` 95, `usmc-sessions` 4).
+  All of it lands as `observed`, never as `memory`/`lesson`: foreign material
+  belongs in `find()`, and must not crowd out what `recall()` was curated for.
+- **`sqlite_table`: `content` may now name several columns**, joined in order.
+  A row whose meaning is split over two text fields was only half searchable
+  before — whichever column was not configured simply was not in the index.
+  This was live: `bach-lessons` had been indexing `solution` while every
+  lesson's `problem` text stayed invisible. Both BACH and USMC lessons are now
+  indexed as problem + solution (174 BACH lessons re-indexed).
+- **`agent_transcripts`: new `default_role`** for single-role archives that
+  carry no role field at all. Without it such a file indexed nothing, because
+  an absent role never matches the `roles` filter — which is exactly what a
+  bare prompt history looks like. A missing role without `default_role` is
+  still skipped rather than indexed under an invented one.
+- **Fixed a source pointing at a path that no longer exists**:
+  `memoryhooker-docs` still referenced the module's pre-2026-07-26 location.
+  A source can go stale silently — it keeps reporting success while indexing
+  an empty directory.
+- Tests: +4 (multi-column content incl. an unknown-column refusal,
+  `default_role`, and the unchanged no-role-no-default guard). Together
+  with the search GUI landed the same day, the suite stands at 54.
+
 ## 2026-07-31
 
 - **Search GUI for humans (`search_gui.py`, `gardener gui`)**:
