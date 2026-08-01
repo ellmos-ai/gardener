@@ -32,7 +32,7 @@
     each new source reported indexed.
 - **Two disabled-by-default source-config templates for cross-host
   federation** via a separate transit-sync mechanism that mirrors another
-  host's databases to read-only `~/.transit-replicas/<host>/<namespace>.sqlite`
+  host's databases to read-only `~/.republica/<host>/<namespace>.sqlite` (Republica showcases)
   snapshots: `usmc_replica_source_configs(host)` (facts/lessons/working/
   sessions, the same four-way split as this machine's own `usmc-*`
   sources) and `gardener_replica_source_config(host)` (the foreign

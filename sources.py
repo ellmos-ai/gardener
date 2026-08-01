@@ -598,12 +598,12 @@ def scan(source_id: str, config: Dict,
 
 
 # ---------------------------------------------------------------------------
-# Replica source templates (cross-host federation via .transit-replicas)
+# Replica source templates (cross-host federation via Republica showcases)
 # ---------------------------------------------------------------------------
 #
 # A separate transit-sync mechanism (outside this module) mirrors another
 # host's USMC/Gardener databases into read-only snapshot files at
-# ``~/.transit-replicas/<source-host>/<namespace>.sqlite``. These are
+# ``~/.republica/<source-host>/<namespace>.sqlite`` (Republica showcases). These are
 # ordinary foreign SQLite databases once they exist -- `sqlite_table`
 # above is already the right adapter for them; nothing new needed to be
 # built to READ one.
@@ -647,7 +647,7 @@ def _current_host() -> str:
 
 def _replica_db_path(host: str, namespace: str, replicas_root=None) -> str:
     root = Path(replicas_root) if replicas_root else Path(
-        os.path.expanduser("~/.transit-replicas"))
+        os.path.expanduser("~/.republica"))
     return str(root / host / namespace)
 
 

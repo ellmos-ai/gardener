@@ -537,7 +537,7 @@ class TestFederatedSearchAndCrud(ObserveSourceTestCase):
 
 class TestReplicaSourceTemplates(unittest.TestCase):
     """OP-MEMSYNC Teil B3: config builders for cross-host
-    ``.transit-replicas`` sources. Pure functions, no Gardener instance
+    ``.republica`` sources. Pure functions, no Gardener instance
     needed -- see TestReplicaSourceLifecycle below for the wired-up
     behaviour (disabled / absent-directory / real-snapshot).
     """
@@ -561,7 +561,7 @@ class TestReplicaSourceTemplates(unittest.TestCase):
     def test_usmc_template_covers_all_four_tables_disabled_by_default(self):
         import sources
         cfgs = sources.usmc_replica_source_configs(
-            "OTHER-HOST", replicas_root=r"C:\fake\.transit-replicas")
+            "OTHER-HOST", replicas_root=r"C:\fake\.republica")
         self.assertEqual(set(cfgs), {
             "replica-other-host-usmc-facts",
             "replica-other-host-usmc-lessons",
@@ -582,7 +582,7 @@ class TestReplicaSourceTemplates(unittest.TestCase):
     def test_gardener_template_is_disabled_by_default(self):
         import sources
         cfgs = sources.gardener_replica_source_config(
-            "OTHER-HOST", replicas_root=r"C:\fake\.transit-replicas")
+            "OTHER-HOST", replicas_root=r"C:\fake\.republica")
         self.assertEqual(list(cfgs), ["replica-other-host-gardener"])
         cfg = cfgs["replica-other-host-gardener"]
         self.assertFalse(cfg["enabled"])
@@ -601,7 +601,7 @@ class TestReplicaSourceLifecycle(ObserveSourceTestCase):
     def test_disabled_replica_is_a_clean_no_op(self):
         import sources
         cfgs = sources.usmc_replica_source_configs(
-            "OTHER-HOST", replicas_root=str(self.foreign / ".transit-replicas"))
+            "OTHER-HOST", replicas_root=str(self.foreign / ".republica"))
         for source_id, cfg in cfgs.items():
             self.af.observe_source_add(source_id, "sqlite_table", **cfg)
         result = self.af.observe_sources()
@@ -615,7 +615,7 @@ class TestReplicaSourceLifecycle(ObserveSourceTestCase):
         # (scan_sqlite_table's own db_file.is_file() guard).
         import sources
         cfgs = sources.usmc_replica_source_configs(
-            "OTHER-HOST", replicas_root=str(self.foreign / ".transit-replicas"))
+            "OTHER-HOST", replicas_root=str(self.foreign / ".republica"))
         for source_id, cfg in cfgs.items():
             self.af.observe_source_add(
                 source_id, "sqlite_table", **{**cfg, "enabled": True})
@@ -628,7 +628,7 @@ class TestReplicaSourceLifecycle(ObserveSourceTestCase):
 
     def test_armed_replica_against_a_real_foreign_snapshot_is_findable(self):
         import sources
-        replicas_root = self.foreign / ".transit-replicas"
+        replicas_root = self.foreign / ".republica"
         db_path = Path(sources._replica_db_path(
             "OTHER-HOST", "usmc.sqlite", str(replicas_root)))
         db_path.parent.mkdir(parents=True, exist_ok=True)
