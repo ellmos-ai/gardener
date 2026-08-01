@@ -154,6 +154,50 @@ class TestMarkdownDirPatterns(ObserveSourceTestCase):
         self.assertEqual(len(self.af.find("Reine Textnotiz")), 1)
         self.assertEqual(self.af.find("Markdown-Notiz"), [])
 
+    def test_extra_tags_are_appended_for_downstream_filtering(self):
+        # A consumer that bypasses recall() (going straight at the DB)
+        # cannot rely on `type` alone -- observe-sources always set it to
+        # 'observed'. extra_tags lets a source mark its items so such a
+        # consumer can tell a rule file apart from a rotating registry.
+        mem_dir = self.foreign / "memory"
+        mem_dir.mkdir(parents=True, exist_ok=True)
+        (mem_dir / "notes.md").write_text("Registrierte Notiz.", encoding="utf-8")
+
+        self.af.observe_source_add(
+            "mem", "markdown_dir", path=str(mem_dir), extra_tags=["register-log"])
+        result = self.af.observe_sources("mem")
+        self.assertEqual(result["mem"]["indexed"], 1)
+
+        hits = self.af.find("Registrierte Notiz")
+        self.assertEqual(len(hits), 1)
+        tags = hits[0]["tags"]
+        self.assertIn("markdown_dir", tags)
+        self.assertIn("mem", tags)
+        self.assertIn("register-log", tags)
+
+    def test_extra_tags_accepts_a_single_string(self):
+        # Config convenience: one tag doesn't need list syntax.
+        mem_dir = self.foreign / "memory"
+        mem_dir.mkdir(parents=True, exist_ok=True)
+        (mem_dir / "notes.md").write_text("Eine Notiz.", encoding="utf-8")
+
+        self.af.observe_source_add(
+            "mem", "markdown_dir", path=str(mem_dir), extra_tags="policy")
+        result = self.af.observe_sources("mem")
+        self.assertEqual(result["mem"]["indexed"], 1)
+        self.assertIn("policy", self.af.find("Eine Notiz")[0]["tags"])
+
+    def test_no_extra_tags_leaves_tags_unchanged(self):
+        # Backward compatibility: omitting extra_tags must not append a
+        # trailing comma or otherwise change the existing tag format.
+        mem_dir = self.foreign / "memory"
+        mem_dir.mkdir(parents=True, exist_ok=True)
+        (mem_dir / "notes.md").write_text("Unveraenderte Notiz.", encoding="utf-8")
+
+        self.af.observe_source_add("mem", "markdown_dir", path=str(mem_dir))
+        self.af.observe_sources("mem")
+        self.assertEqual(self.af.find("Unveraenderte Notiz")[0]["tags"], "markdown_dir,mem")
+
 
 class TestRememberFilesSource(ObserveSourceTestCase):
     def test_recursive_glob_finds_nested_remember_files(self):
@@ -489,6 +533,132 @@ class TestFederatedSearchAndCrud(ObserveSourceTestCase):
 
     def test_refresh_unknown_source_id_reports_error(self):
         self.assertIn("error", self.af.observe_sources("does-not-exist"))
+
+
+class TestReplicaSourceTemplates(unittest.TestCase):
+    """OP-MEMSYNC Teil B3: config builders for cross-host
+    ``.transit-replicas`` sources. Pure functions, no Gardener instance
+    needed -- see TestReplicaSourceLifecycle below for the wired-up
+    behaviour (disabled / absent-directory / real-snapshot).
+    """
+
+    def test_refuses_to_build_a_config_for_the_current_host(self):
+        import sources
+        real_host = sources._current_host()
+        self.assertTrue(real_host, "no hostname resolvable in this environment")
+        with self.assertRaises(ValueError):
+            sources.usmc_replica_source_configs(real_host)
+        with self.assertRaises(ValueError):
+            sources.gardener_replica_source_config(real_host)
+
+    def test_refuses_an_empty_host(self):
+        import sources
+        with self.assertRaises(ValueError):
+            sources.usmc_replica_source_configs("")
+        with self.assertRaises(ValueError):
+            sources.gardener_replica_source_config("")
+
+    def test_usmc_template_covers_all_four_tables_disabled_by_default(self):
+        import sources
+        cfgs = sources.usmc_replica_source_configs(
+            "OTHER-HOST", replicas_root=r"C:\fake\.transit-replicas")
+        self.assertEqual(set(cfgs), {
+            "replica-other-host-usmc-facts",
+            "replica-other-host-usmc-lessons",
+            "replica-other-host-usmc-working",
+            "replica-other-host-usmc-sessions",
+        })
+        for source_id, cfg in cfgs.items():
+            self.assertFalse(cfg["enabled"], source_id)
+            self.assertTrue(
+                cfg["db_path"].replace("/", "\\").endswith("OTHER-HOST\\usmc.sqlite"),
+                cfg["db_path"])
+        # Lessons split across two columns, matching the local usmc-lessons
+        # source (see CHANGELOG 2026-08-01 / commit 2c721cf).
+        self.assertEqual(
+            cfgs["replica-other-host-usmc-lessons"]["columns"]["content"],
+            ["problem", "solution"])
+
+    def test_gardener_template_is_disabled_by_default(self):
+        import sources
+        cfgs = sources.gardener_replica_source_config(
+            "OTHER-HOST", replicas_root=r"C:\fake\.transit-replicas")
+        self.assertEqual(list(cfgs), ["replica-other-host-gardener"])
+        cfg = cfgs["replica-other-host-gardener"]
+        self.assertFalse(cfg["enabled"])
+        self.assertEqual(cfg["table"], "everything")
+
+
+class TestReplicaSourceLifecycle(ObserveSourceTestCase):
+    """A replica source must never raise, whether it is (a) registered but
+    disabled, or (b) armed while the transit-sync snapshot doesn't exist
+    on disk yet -- exactly the "deaktiviert ODER sauber uebersprungen"
+    requirement. (c) proves the template's column mapping is actually
+    correct once a real snapshot does exist, not just that it degrades
+    safely when absent.
+    """
+
+    def test_disabled_replica_is_a_clean_no_op(self):
+        import sources
+        cfgs = sources.usmc_replica_source_configs(
+            "OTHER-HOST", replicas_root=str(self.foreign / ".transit-replicas"))
+        for source_id, cfg in cfgs.items():
+            self.af.observe_source_add(source_id, "sqlite_table", **cfg)
+        result = self.af.observe_sources()
+        for source_id in cfgs:
+            self.assertEqual(result[source_id], {"skipped_disabled": True})
+
+    def test_enabled_replica_without_a_directory_yet_is_still_a_clean_no_op(self):
+        # Armed (enabled=True) but the transit-sync hasn't produced this
+        # host's snapshot yet -- must behave exactly like any other
+        # sqlite_table source pointed at a file that doesn't exist yet
+        # (scan_sqlite_table's own db_file.is_file() guard).
+        import sources
+        cfgs = sources.usmc_replica_source_configs(
+            "OTHER-HOST", replicas_root=str(self.foreign / ".transit-replicas"))
+        for source_id, cfg in cfgs.items():
+            self.af.observe_source_add(
+                source_id, "sqlite_table", **{**cfg, "enabled": True})
+        result = self.af.observe_sources()
+        for source_id in cfgs:
+            self.assertEqual(
+                result[source_id],
+                {"kind": "sqlite_table", "indexed": 0, "skipped": 0})
+        self.assertEqual(self.af.find("irrelevant"), [])
+
+    def test_armed_replica_against_a_real_foreign_snapshot_is_findable(self):
+        import sources
+        replicas_root = self.foreign / ".transit-replicas"
+        db_path = Path(sources._replica_db_path(
+            "OTHER-HOST", "usmc.sqlite", str(replicas_root)))
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "CREATE TABLE usmc_lessons (id INTEGER PRIMARY KEY, category TEXT, "
+            "severity TEXT, title TEXT, problem TEXT, solution TEXT, "
+            "agent_id TEXT, is_active INTEGER, confidence REAL, "
+            "times_shown INTEGER, created_at TEXT, updated_at TEXT)")
+        conn.execute(
+            "INSERT INTO usmc_lessons (id, category, title, problem, solution) "
+            "VALUES (1, 'sync', 'Replica-Beispiel', "
+            "'Snapshot fehlte auf dem Zielrechner', "
+            "'Transit-Sync einmal laufen lassen')")
+        conn.commit()
+        conn.close()
+
+        cfgs = sources.usmc_replica_source_configs(
+            "OTHER-HOST", replicas_root=str(replicas_root))
+        lessons_cfg = cfgs["replica-other-host-usmc-lessons"]
+        self.af.observe_source_add(
+            "replica-other-host-usmc-lessons", "sqlite_table",
+            **{**lessons_cfg, "enabled": True})
+        result = self.af.observe_sources("replica-other-host-usmc-lessons")
+        self.assertEqual(
+            result["replica-other-host-usmc-lessons"]["indexed"], 1)
+
+        hits = self.af.find("Transit-Sync einmal laufen lassen")
+        self.assertEqual(len(hits), 1)
+        self.assertIn("Snapshot fehlte", hits[0]["content"])
 
 
 if __name__ == "__main__":

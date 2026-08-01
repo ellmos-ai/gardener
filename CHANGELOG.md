@@ -1,5 +1,53 @@
 # Changelog
 
+## 2026-08-01 (later)
+
+- **`markdown_dir`/`remember_files`: new `extra_tags`** (string or list),
+  appended to every item's tags. `type` is always `observed` for anything
+  an observe-source indexes, so a consumer going straight at the DB
+  (rather than through `recall()`) has no way to tell a rule file apart
+  from a rotating registry without it -- both are `observed` alike.
+  `extra_tags` adds a source-level axis for exactly that distinction,
+  without inventing a second `type`.
+- **12 new observe-sources**, all `markdown_dir`, all read-only:
+  - `.SYNC/_policies/library` and `/adoption` (`policy-library` 4,
+    `policy-adoption` 4), tagged `policy`.
+  - Root-level pipeline steering docs (`CLAUDE.md`, `README.md`,
+    `MASTER-REGISTRY.md`, `POLICY-REG.md`, `STATUS_UEBERSICHT*.md`) for
+    six pipeline roots (`pipeline-docs-topics` 1, `-ai` 1, `-research` 13,
+    `-roblox` 3, `-software` 4, `-umbruch` 2), tagged `pipeline-doc`. Root
+    level only, deliberately not recursive -- a pipeline root can hold
+    thousands of per-project files below it.
+  - Root-level `CHECKS-REG.md` on the four pipeline roots where a plain
+    (non-host-suffixed) copy actually exists (`register-log-ai`,
+    `-research`, `-roblox`, `-software`, 1 each), tagged `register-log`.
+    Deliberately excludes host-suffixed rotation copies
+    (`CHECKS-REG-<HOST>-<N>.md`) and the large rotating `CHECKS-LOG*.txt`
+    raw logs -- those are exactly the "thousands of files" scope this
+    layer has always avoided.
+  - `AUTOMATIONS-MEMORY.md` was searched for too, but not newly
+    registered: the two canonical copies are already indexed by the
+    pre-existing `gemini-rules` and `gemini-antigravity` sources.
+  - `everything` count: 14257 -> 14293 (+36), matching the sum of what
+    each new source reported indexed.
+- **Two disabled-by-default source-config templates for cross-host
+  federation** via a separate transit-sync mechanism that mirrors another
+  host's databases to read-only `~/.transit-replicas/<host>/<namespace>.sqlite`
+  snapshots: `usmc_replica_source_configs(host)` (facts/lessons/working/
+  sessions, the same four-way split as this machine's own `usmc-*`
+  sources) and `gardener_replica_source_config(host)` (the foreign
+  `everything` table). Both raise for the current machine's own hostname
+  -- a replica directory named after the current host is that host's
+  replica of *itself*, and indexing it would duplicate every row under a
+  second source_id. Neither is registered anywhere by default; arming one
+  is a two-line call once a real other-host snapshot exists (see
+  `sources.py`'s module note above `usmc_replica_source_configs`).
+- Tests: +10 (`extra_tags` on/off/single-string; the two template
+  builders' self-host guard and disabled-by-default shape; a disabled
+  replica, an enabled-but-absent replica, and an enabled replica against
+  a real foreign snapshot are all clean, exception-free paths). Suite:
+  54 -> 64.
+
 ## 2026-08-01
 
 - **README language parity:** Synchronized `README_de.md` with the canonical

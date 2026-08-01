@@ -197,7 +197,7 @@ Vier Quellenarten:
 
 | Art | Was indexiert wird | Wichtige Config |
 |---|---|---|
-| `markdown_dir` | Ein Verzeichnis mit Markdown-Dateien, ein Eintrag pro Datei. `path` darf selbst ein Glob sein, das mehrere Verzeichnisse abdeckt (z. B. eine Pro-Projekt-Memory-Konvention). `patterns` erweitert dies auf andere Dateiarten (z. B. `.txt`-Notizen). | `path`, `patterns` (Liste, Default `["*.md"]`), `glob` (einzelnes Muster, veralteter Alias) |
+| `markdown_dir` | Ein Verzeichnis mit Markdown-Dateien, ein Eintrag pro Datei. `path` darf selbst ein Glob sein, das mehrere Verzeichnisse abdeckt (z. B. eine Pro-Projekt-Memory-Konvention). `patterns` erweitert dies auf andere Dateiarten (z. B. `.txt`-Notizen). `extra_tags` haengt jedem Eintrag statische Tags an, damit ein nachgelagerter Konsument Quellen jenseits des festen `type='observed'` unterscheiden kann (z. B. eine Regeldatei, die als Hinweis eingeblendet werden soll, gegenueber einer rotierenden Registry, die durchsuchbar bleiben, aber nicht eingeblendet werden soll). | `path`, `patterns` (Liste, Default `["*.md"]`), `glob` (einzelnes Muster, veralteter Alias), `extra_tags` (String oder Liste) |
 | `remember_files` | Kleine Notiz-Dateien irgendwo unterhalb einer Wurzel, gefunden über rekursives Glob. | `path`, `glob` (Default `**/.remember`) |
 | `sqlite_table` | Eine einzelne Tabelle in einer fremden SQLite-Datenbank, streng lesend geöffnet (`mode=ro`). Spaltennamen werden vor Nutzung gegen das echte Schema geprüft (Whitelist). `content` darf mehrere Spalten benennen, die der Reihe nach zusammengefügt werden — eine Zeile, deren Sinn auf zwei Textfelder verteilt ist (das Problem *und* die Lösung einer Lesson), bleibt so vollständig durchsuchbar. | `db_path`, `table`, `columns` (`content` Pflicht, String oder Liste; `id`/`name`/`tags` optional) |
 | `agent_transcripts` | JSONL-Chat-Transkripte, zeilenweise indexiert, **nur Text-Turns** (Tool-Aufrufe/-Ergebnisse und interne „Thinking"-Blöcke werden übersprungen). Bringt ein eingebautes Feld-Mapping für Claude Codes eigenes Transkriptformat mit; jedes andere zeilenbasierte JSON-Transkript lässt sich über ein generisches Dotted-Path-Role/Text-Mapping indexieren. `default_role` deckt Archive mit nur einer Rolle ab, die gar kein Rollenfeld führen — etwa eine reine Prompt-Historie. Große, wachsende Dateien werden ab einem gespeicherten Byte-Offset weitergelesen — ein Refresh liest nie erneut, was schon indexiert wurde. | `path` (Glob, `**` rekursiv), `format` (`claude_code` Default, oder `generic` mit `role_field`/`text_field`/`default_role`) |
@@ -262,6 +262,27 @@ af.observe_source_add("usmc-lessons", "sqlite_table",
                        columns={"id": "id", "name": "title",
                                 "content": ["problem", "solution"],
                                 "tags": "category"})
+```
+
+### Eine Quelle fuer nachgelagerte Filterung taggen
+
+`type` ist bei allem, was eine observe-source indexiert, immer `observed` —
+ein Konsument, der die DB direkt abfragt (statt ueber `recall()`, das sich
+ohnehin auf `memory`/`lesson`/`session` beschraenkt), kann darueber eine
+Regeldatei nicht von einer rotierenden Check-Registry unterscheiden.
+`extra_tags` fuegt genau dafuer eine zweite, quellenweite Achse hinzu:
+
+```python
+# Findbar und es wert, als Hinweis eingeblendet zu werden
+af.observe_source_add("team-policies", "markdown_dir",
+                       path="~/policies", extra_tags=["policy"])
+
+# Findbar, aber ein Konsument darf sich vertretbar dagegen entscheiden,
+# es einzublenden -- ein rotierendes Log ist als eingeblendeter Hinweis
+# selten nuetzlich, auch wenn es in find() weiter etwas wert ist
+af.observe_source_add("check-registry", "markdown_dir",
+                       path="~/registries", patterns=["CHECKS-REG.md"],
+                       extra_tags=["register-log"])
 ```
 
 Alles so Indexierte ist `observed` — fremdes Material, erreichbar über

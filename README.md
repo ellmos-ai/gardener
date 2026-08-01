@@ -196,7 +196,7 @@ Four source kinds:
 
 | Kind | What it indexes | Key config |
 |------|------------------|------------|
-| `markdown_dir` | A directory of markdown files, one entry per file. The `path` may itself be a glob spanning several directories (e.g. a per-project memory convention). `patterns` widens this to other file kinds (e.g. `.txt` notes). | `path`, `patterns` (list, default `["*.md"]`), `glob` (single-pattern legacy alias) |
+| `markdown_dir` | A directory of markdown files, one entry per file. The `path` may itself be a glob spanning several directories (e.g. a per-project memory convention). `patterns` widens this to other file kinds (e.g. `.txt` notes). `extra_tags` appends static tags to every item, so a downstream consumer can tell sources apart beyond the fixed `type='observed'` (e.g. a rule file worth surfacing as a hint vs. a rotating registry that should stay searchable but not surfaced). | `path`, `patterns` (list, default `["*.md"]`), `glob` (single-pattern legacy alias), `extra_tags` (string or list) |
 | `remember_files` | Small note files anywhere below a root, found via a recursive glob. | `path`, `glob` (default `**/.remember`) |
 | `sqlite_table` | A single table in a foreign SQLite database, opened strictly read-only (`mode=ro`). Column names are whitelisted against the live schema before use. `content` may name several columns, joined in order — a row whose meaning is split across two text fields (a lesson's problem *and* its solution) stays fully searchable. | `db_path`, `table`, `columns` (`content` required, string or list; `id`/`name`/`tags` optional) |
 | `agent_transcripts` | JSONL chat transcripts, indexed line by line, **text turns only** (tool calls/results and internal "thinking" blocks are skipped). Ships a built-in field mapping for Claude Code's own transcript format; any other line-based JSON transcript can be indexed via a generic dotted-path role/text mapping. `default_role` covers single-role archives that carry no role field at all, such as a bare prompt history. Large, growing files are tailed from a saved byte offset — a refresh never re-reads what it already indexed. | `path` (glob, `**` recurses), `format` (`claude_code` default, or `generic` with `role_field`/`text_field`/`default_role`) |
@@ -261,6 +261,27 @@ af.observe_source_add("usmc-lessons", "sqlite_table",
                        columns={"id": "id", "name": "title",
                                 "content": ["problem", "solution"],
                                 "tags": "category"})
+```
+
+### Tagging a source for downstream filtering
+
+`type` is always `observed` for everything an observe-source indexes — a
+consumer that queries the DB directly (rather than through `recall()`,
+which already restricts itself to `memory`/`lesson`/`session`) cannot use
+`type` to tell a rule file apart from a rotating check registry. `extra_tags`
+adds a second, source-level axis for exactly that:
+
+```python
+# Findable and worth surfacing as a hint
+af.observe_source_add("team-policies", "markdown_dir",
+                       path="~/policies", extra_tags=["policy"])
+
+# Findable, but a consumer may reasonably choose not to surface it —
+# a rotating log is rarely useful as an injected hint, even though it's
+# still worth having in find()
+af.observe_source_add("check-registry", "markdown_dir",
+                       path="~/registries", patterns=["CHECKS-REG.md"],
+                       extra_tags=["register-log"])
 ```
 
 Everything indexed this way is `observed` — foreign material, reachable

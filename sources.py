@@ -31,6 +31,10 @@ Four adapter kinds, registered in ``ADAPTERS``:
                        e.g. Claude Code's ``~/.claude/projects/*/memory``.
                        ``patterns`` (default ``["*.md"]``) can widen
                        this to other file kinds, e.g. ``.txt`` notes.
+                       ``extra_tags`` can mark every item from a source
+                       for a downstream consumer to filter on (e.g. a
+                       rotating registry tagged apart from a rule file),
+                       without inventing a second `type` axis.
   remember_files       Small note files matched by a recursive glob
                        (default pattern: ``**/.remember``).
   sqlite_table         A single table in a foreign, read-only SQLite
@@ -54,6 +58,7 @@ import glob
 import hashlib
 import json
 import os
+import platform
 import re
 import sqlite3
 from dataclasses import dataclass, field
@@ -111,6 +116,27 @@ def _dig(d: Any, dotted_path: str) -> Any:
     return cur
 
 
+def _extra_tags_suffix(config: Dict) -> str:
+    """Optional static tags appended to every item an adapter yields, via
+    config['extra_tags'] (a string or a list of strings).
+
+    This is a source-level concern, distinct from `type` (which observe-
+    sources always set to 'observed' -- see gardener.py's observe_sources()).
+    A consumer that goes straight to the DB rather than through recall()
+    (a memory-injection backend, say) may want to treat two 'observed'
+    sources differently -- e.g. keep a rule file findable AND surfaced as
+    a hint, while keeping a rotating check-registry findable but NOT
+    surfaced, without that distinction living in `type`. `extra_tags` is
+    how a source config expresses that without inventing a second type
+    axis: tag it, and let the consumer filter on tags.
+    """
+    extra = config.get("extra_tags") or []
+    if isinstance(extra, str):
+        extra = [extra]
+    cleaned = [str(t).strip() for t in extra if str(t).strip()]
+    return ("," + ",".join(cleaned)) if cleaned else ""
+
+
 # ---------------------------------------------------------------------------
 # Adapter: markdown_dir / remember_files (share a file-glob scanner)
 # ---------------------------------------------------------------------------
@@ -130,6 +156,13 @@ def _iter_text_files(source_id: str, config: Dict, default_patterns,
         glob: single filename pattern -- older alias kept for
               backward compatibility, equivalent to `patterns: [glob]`.
               Ignored if `patterns` is also set.
+        extra_tags: optional string or list of strings, appended to every
+              item's tags (see `_extra_tags_suffix`). Lets a consumer
+              distinguish sources by tag beyond the fixed `type='observed'`
+              -- e.g. tagging a rule-file source 'policy' (keep it
+              surfaced as a hint) versus a rotating registry source
+              'register-log' (findable, but a consumer may choose to
+              exclude it from what gets surfaced).
     """
     raw_path = str(config.get("path", ""))
     if not raw_path:
@@ -167,7 +200,7 @@ def _iter_text_files(source_id: str, config: Dict, default_patterns,
                 key=key,
                 name=f"observed/{source_id}/{key}",
                 content=content,
-                tags=f"{kind_tag},{source_id}",
+                tags=f"{kind_tag},{source_id}{_extra_tags_suffix(config)}",
                 meta={
                     "source_ref": {"kind": kind_tag, "path": str(file_path)},
                     "size": stat.st_size,
@@ -562,3 +595,129 @@ def scan(source_id: str, config: Dict,
         yield from adapter(source_id, config, state=state)
     else:
         yield from adapter(source_id, config)
+
+
+# ---------------------------------------------------------------------------
+# Replica source templates (cross-host federation via .transit-replicas)
+# ---------------------------------------------------------------------------
+#
+# A separate transit-sync mechanism (outside this module) mirrors another
+# host's USMC/Gardener databases into read-only snapshot files at
+# ``~/.transit-replicas/<source-host>/<namespace>.sqlite``. These are
+# ordinary foreign SQLite databases once they exist -- `sqlite_table`
+# above is already the right adapter for them; nothing new needed to be
+# built to READ one.
+#
+# What *is* new here: the standard config for one such replica, built
+# from a host name, analogous to this machine's own usmc-facts /
+# usmc-lessons / usmc-working / usmc-sessions sources (see the module's
+# runtime config) -- just pointed at the replica snapshot instead of the
+# local ``~/.usmc/usmc_memory.db``.
+#
+# Self-replica trap: a replica directory is named after the SOURCE host,
+# and that same directory name equals the CURRENT host when the transit
+# sync has (as designed) also mirrored this machine's own databases back
+# to itself for verification. Indexing that one would feed a host's own
+# user.db back into itself -- every entry appearing a second time under a
+# new source_id. Both builders below refuse to build a config for the
+# current host; the caller supplies a real *other* host's name.
+#
+# To arm a replica once a genuine other-host snapshot exists:
+#
+#   import sources
+#   for source_id, cfg in sources.usmc_replica_source_configs("<OTHER-HOST>").items():
+#       af.observe_source_add(source_id, "sqlite_table", **{**cfg, "enabled": True})
+#
+# Until that call is made, nothing runs: this module registers no source
+# by itself, and the generated config's own ``enabled: False`` keeps it
+# off even if a caller adds it as-is. Should a replica directory not
+# exist yet (or vanish later, e.g. a stale sync), scan_sqlite_table's own
+# ``db_file.is_file()`` guard (above) makes a refresh against it a silent
+# no-op -- 0 indexed, 0 skipped, never an exception. That guard is what
+# makes this safe to register ahead of the replica actually appearing.
+
+def _current_host() -> str:
+    """Best-effort current hostname, for the self-replica guard below.
+    Prefers the Windows env var (set on every login shell); falls back to
+    $HOSTNAME (Unix) and finally platform.node() if neither is set.
+    """
+    return (os.environ.get("COMPUTERNAME") or os.environ.get("HOSTNAME")
+            or platform.node() or "")
+
+
+def _replica_db_path(host: str, namespace: str, replicas_root=None) -> str:
+    root = Path(replicas_root) if replicas_root else Path(
+        os.path.expanduser("~/.transit-replicas"))
+    return str(root / host / namespace)
+
+
+def usmc_replica_source_configs(host: str, replicas_root=None) -> Dict[str, Dict]:
+    """Standard sqlite_table configs for one host's replicated USMC
+    database (facts/lessons/working/sessions) -- the four-table split
+    mirrors this machine's own usmc-* sources exactly, just against
+    ``<replicas_root>/<host>/usmc.sqlite`` instead of the local DB.
+    Every returned config carries ``enabled: False``; the caller decides
+    whether and when to arm it (see module docstring above).
+
+    Raises ValueError if `host` is empty or names the CURRENT machine --
+    see the self-replica trap explained above.
+    """
+    if not host or host == _current_host():
+        raise ValueError(
+            f"refusing to build a replica source config for the current "
+            f"host ({host!r}) -- its own USMC replica of itself would "
+            f"duplicate every fact/lesson/session under a second source_id"
+        )
+    db_path = _replica_db_path(host, "usmc.sqlite", replicas_root)
+    base = {"db_path": db_path, "enabled": False}
+    slug = host.lower()
+    return {
+        f"replica-{slug}-usmc-facts": {
+            **base, "table": "usmc_facts",
+            "columns": {"id": "id", "name": "key", "content": "value",
+                        "tags": "category"},
+        },
+        f"replica-{slug}-usmc-lessons": {
+            **base, "table": "usmc_lessons",
+            "columns": {"id": "id", "name": "title",
+                        "content": ["problem", "solution"], "tags": "category"},
+        },
+        f"replica-{slug}-usmc-working": {
+            **base, "table": "usmc_working",
+            "columns": {"id": "id", "content": "content", "tags": "tags"},
+        },
+        f"replica-{slug}-usmc-sessions": {
+            **base, "table": "usmc_sessions",
+            "columns": {"id": "id", "name": "current_task",
+                        "content": "handoff_notes"},
+        },
+    }
+
+
+def gardener_replica_source_config(host: str, replicas_root=None) -> Dict[str, Dict]:
+    """Standard sqlite_table config for one host's replicated Gardener
+    ``user.db`` (its single ``everything`` table), read like any other
+    foreign source -- true federation: everything that host observed or
+    put() becomes findable here too, under its own source_id.
+
+    Same self-replica guard as `usmc_replica_source_configs`, and for the
+    same reason it matters more here: this DB's ``everything`` table
+    already contains every entry this module itself indexes (including
+    everything from other observe-sources), so indexing your own host's
+    replica of itself would double the entire database under one new
+    name instead of duplicating a handful of rows.
+    """
+    if not host or host == _current_host():
+        raise ValueError(
+            f"refusing to build a replica source config for the current "
+            f"host ({host!r}) -- its own user.db replica of itself would "
+            f"duplicate the whole database under a second source_id"
+        )
+    db_path = _replica_db_path(host, "gardener-user.sqlite", replicas_root)
+    return {
+        f"replica-{host.lower()}-gardener": {
+            "db_path": db_path, "enabled": False, "table": "everything",
+            "columns": {"id": "id", "name": "name", "content": "content",
+                        "tags": "tags"},
+        },
+    }
