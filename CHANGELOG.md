@@ -1,5 +1,74 @@
 # Changelog
 
+## 2026-08-02 (later)
+
+Secrets are now redacted on the way into the index, a credential found in a
+cloud-synced document raises an alert, and archived transcripts are read
+straight out of their zip.
+
+- **Secret redaction (`sources.redact_secrets`)**, applied in `scan()` --
+  the one gate every adapter's items pass through, so a future adapter
+  cannot forget it. The pattern family stays readable
+  (`ghp_***REDACTED***`), the value does not survive.
+  **Deliberate semantics: an agent that needs the real token must go to
+  the source file. The index says where a credential lives, never what it
+  is.**
+  - 13 families, following the documented formats used by GitHub secret
+    scanning, gitleaks and Yelp detect-secrets: Anthropic, OpenAI (legacy
+    and project/service/admin keys), GitHub PAT classic + fine-grained,
+    AWS access key ids, Slack bot/user/app tokens, Google API keys, GitLab
+    PATs, npm tokens, `Authorization: Bearer` headers, and PEM private-key
+    blocks.
+  - Every pattern anchors on a fixed length, a restricted character class
+    and -- where the vendor provides one -- a literal marker (`T3BlbkFJ`,
+    the trailing `AA` on Anthropic keys). That anchoring, not the prefix,
+    is what keeps prose out: `skalar`, `ghpx_…`, `AKIAA`, `AIzaX`, `npm_install`
+    and a bare "Bearer" in a sentence are all left alone (asserted).
+  - AWS bodies match `[A-Z0-9]{16}`, not gitleaks' base32 `[A-Z2-7]{16}`:
+    the narrower class would let a real key containing 0/1/8/9 through,
+    and for a redaction step missing a live secret is the worse error.
+  - Deliberately **not** included: entropy heuristics and keyword
+    detectors (`password=`). Both are documented high-recall/low-precision
+    and would black out hashes, UUIDs and ordinary config prose. A step
+    that runs unattended must not guess.
+  - Fingerprints stay computed over the original text -- they answer "has
+    the source changed", and the source is the unredacted file. Rewriting
+    them would invalidate every stored fingerprint and force a full
+    re-index.
+- **Cloud credential alert.** A signature found in a file under
+  `~/OneDrive` (override: `GARDENER_CLOUD_ROOT`) is a security finding in
+  its own right -- the value has left the machine. One line per finding is
+  appended to `SECURITY-ALERT_TOKEN-IN-ONEDRIVE.md`
+  (`GARDENER_CLOUD_ALERT_FILE`) with date, source path and family --
+  **never the value and never the surrounding text**, because the alert
+  file lives in the very folder it warns about. Idempotent: a finding
+  already listed is not appended again. A signature in a *local* transcript
+  (`~/.codex`, `~/.claude`) raises no alert -- it never left. Findings are
+  also reported in `observe_sources()`' stats and warned about on stderr.
+- **Zip archives as a transcript source.** `agent_transcripts` reads JSONL
+  members straight out of a `.zip` via `zipfile`; nothing is unpacked to
+  disk. `zip_inner` selects members (default `*.jsonl`). Incrementality is
+  per archive rather than per byte offset -- an archive is a finished
+  thing, so an unchanged (mtime, size) skips the whole file unopened.
+  Archives holding no matching member simply yield nothing.
+- Refactor: the per-line work of `scan_agent_transcripts` moved into
+  `_transcript_item()`, shared by the plain-file and zip paths so the two
+  cannot drift apart in how they extract, name and cite a turn.
+- Tests: +11 (redaction positives per family, look-alike negatives,
+  prefix-stays-readable, redaction reaching the index through both a
+  markdown and a transcript source, alert written/idempotent, local path
+  raising no alert, zip indexing/incremental-skip/no-matching-member, and
+  redaction inside archives). 74 -> 85.
+
+Measured on this machine: retroactive sweep of the existing 284232 entries
+found **6** real credentials (4 npm tokens, 2 AWS key ids), all in local
+Codex transcripts, all pasted into sessions by hand -- context like
+``//registry.npmjs.org/:_authToken=npm_…`` leaves no doubt they were
+genuine. All 6 redacted in place; 0 unredacted matches remain. Cloud alert
+initial sweep: **0** findings among indexed OneDrive documents.
+`gemini-archive` (the Antigravity conversation archives) indexed 3805
+entries from 102 `transcript.jsonl` members in 4.3 s; second run 0.2 s.
+
 ## 2026-08-02
 
 Every agent provider on the machine is now in one search -- and the three

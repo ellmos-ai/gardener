@@ -7,7 +7,7 @@
 [![Gardener tests](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml/badge.svg)](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests: 73 passed](https://img.shields.io/badge/tests-73%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
+[![Tests: 85 passed](https://img.shields.io/badge/tests-85%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
 [![LLM OS](https://img.shields.io/badge/LLM--OS-SQLite%20Substrate-blueviolet.svg)](https://github.com/ellmos-ai/gardener)
 
 > [!NOTE]
@@ -270,6 +270,14 @@ af.observe_source_add("codex-sessions", "agent_transcripts",
                        path=["~/.codex/sessions/**/*.jsonl",
                              "~/.codex/archived_sessions/*.jsonl"],
                        format="codex", key_by="name")
+
+# Transkripte, die nur im ZIP liegen: streamend gelesen, nie entpackt.
+# Inkrementell je Archiv -- ein Archiv ist abgeschlossen, also ueberspringt
+# unveraenderte (mtime, size) die ganze Datei, ohne sie zu oeffnen.
+af.observe_source_add("gemini-archive", "agent_transcripts",
+                       path="~/.gemini/antigravity/conversations_archive/*.zip",
+                       format="gemini_antigravity",
+                       zip_inner="*/.system_generated/logs/transcript.jsonl")
 ```
 
 ### Was eine Quelle niemals indexieren kann
@@ -292,6 +300,39 @@ Nachbardatei namens `credentials-howto.md` *nicht* ausgeschlossen — nur ein
 echtes `CREDENTIALS/`-Verzeichnis. `gardener.py` leitet seine
 `observe()`/`sync()`-Ausschlussliste aus denselben Konstanten ab: eine Liste
 zu pflegen, und der Home-Ordner-Lauf kann nicht von den Adaptern abdriften.
+
+### Geheimnisse werden beim Hereinkommen geschwaerzt
+
+Die Ausschlussliste haelt Zugangsdaten-*Dateien* draussen. Gegen einen Token,
+den jemand mitten in eine Agenten-Sitzung kopiert hat, hilft sie nicht — der
+Text ist Teil des Transkripts. Deshalb wird der Text selbst redigiert, und
+zwar in `scan()`, dem einen Tor, durch das die Items jedes Adapters gehen:
+
+```text
+//registry.npmjs.org/:_authToken=npm_***REDACTED***
+```
+
+**Die Semantik ist gewollt: Ein Agent, der den echten Token braucht, muss zur
+Quelldatei gehen. Der Index verraet, WO ein Geheimnis liegt, nie WAS es ist.**
+
+13 Familien folgen den dokumentierten Formaten von GitHub Secret Scanning,
+gitleaks und detect-secrets (Anthropic, OpenAI, GitHub-PATs, AWS-Key-IDs,
+Slack, Google, GitLab, npm, `Authorization: Bearer`, PEM-Bloecke). Jedes
+Muster verankert sich an fester Laenge, eingeschraenkter Zeichenklasse und —
+wo der Anbieter einen liefert — einem Literal-Marker (`T3BlbkFJ`). Diese
+Verankerung, nicht das Praefix, haelt Fliesstext draussen: `skalar`,
+`ghpx_…`, `AKIAA`, `npm_install` und ein blosses „Bearer" im Satz bleiben
+unangetastet. Entropie-Heuristiken und Schluesselwort-Detektoren sind bewusst
+NICHT dabei — beide sind high-recall/low-precision, und ein Schritt, der
+unbeaufsichtigt laeuft, darf nicht raten.
+
+Eine Signatur in einer **cloud-synchronisierten** Datei (unter
+`GARDENER_CLOUD_ROOT`, Default `~/OneDrive`) ist ein eigener Sicherheitsbefund,
+weil der Wert das Geraet verlassen hat. Je Fund eine Zeile — Datum, Pfad,
+Familie, **nie der Wert** — wird idempotent an `GARDENER_CLOUD_ALERT_FILE`
+angehaengt, in den Statistiken von `observe_sources()` gezaehlt und auf stderr
+gemeldet. Dieselbe Signatur in einem lokalen Transkript loest keinen Alarm
+aus: sie ist nie hinausgegangen.
 
 ### Eine Quelle fuer nachgelagerte Filterung taggen
 

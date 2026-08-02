@@ -9,7 +9,7 @@
 [![Gardener tests](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml/badge.svg)](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests: 73 passed](https://img.shields.io/badge/tests-73%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
+[![Tests: 85 passed](https://img.shields.io/badge/tests-85%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
 [![LLM OS](https://img.shields.io/badge/LLM--OS-SQLite%20Substrate-blueviolet.svg)](https://github.com/ellmos-ai/gardener)
 
 > [!NOTE]
@@ -262,6 +262,14 @@ af.observe_source_add("codex-sessions", "agent_transcripts",
                              "~/.codex/archived_sessions/*.jsonl"],
                        format="codex", key_by="name")
 
+# Transcripts that only exist inside a zip: read streaming, never
+# unpacked. Incrementality is per archive -- an archive is finished, so
+# an unchanged (mtime, size) skips the whole file unopened.
+af.observe_source_add("gemini-archive", "agent_transcripts",
+                       path="~/.gemini/antigravity/conversations_archive/*.zip",
+                       format="gemini_antigravity",
+                       zip_inner="*/.system_generated/logs/transcript.jsonl")
+
 # A curated memory database, read-only, problem+solution in one entry
 af.observe_source_add("usmc-lessons", "sqlite_table",
                        db_path="~/.usmc/usmc_memory.db", table="usmc_lessons",
@@ -290,6 +298,38 @@ sibling named `credentials-howto.md` is *not* excluded — only an actual
 `CREDENTIALS/` directory is. `gardener.py` derives its `observe()`/
 `sync()` skip list from the same constants, so there is one list to
 maintain and the home-folder walk cannot drift apart from the adapters.
+
+### Secrets are redacted on the way in
+
+The never-index list keeps credential *stores* out. It cannot help with a
+token someone pasted into the middle of an agent session — that text is
+part of the transcript. So the text itself is redacted, in `scan()`, the
+one gate every adapter's items pass through:
+
+```text
+//registry.npmjs.org/:_authToken=npm_***REDACTED***
+```
+
+**The semantics are deliberate: an agent that needs the real token must go
+to the source file. The index tells it where the credential lives, never
+what it is.**
+
+13 families follow the documented formats used by GitHub secret scanning,
+gitleaks and detect-secrets (Anthropic, OpenAI, GitHub PATs, AWS key ids,
+Slack, Google, GitLab, npm, `Authorization: Bearer`, PEM blocks). Each
+anchors on a fixed length, a restricted character class and — where the
+vendor provides one — a literal marker (`T3BlbkFJ`). That anchoring, not
+the prefix, is what keeps prose out: `skalar`, `ghpx_…`, `AKIAA`,
+`npm_install` and a bare "Bearer" in a sentence are left alone. Entropy
+heuristics and keyword detectors are deliberately excluded — both are
+high-recall/low-precision, and a step that runs unattended must not guess.
+
+A signature found in a **cloud-synced** file (under `GARDENER_CLOUD_ROOT`,
+default `~/OneDrive`) is a finding in its own right, because the value has
+left the machine. One line per finding — date, path, family, **never the
+value** — is appended idempotently to `GARDENER_CLOUD_ALERT_FILE`, counted
+in `observe_sources()`' stats and warned about on stderr. The same
+signature in a local transcript raises no alert: it never left.
 
 ### Tagging a source for downstream filtering
 

@@ -67,6 +67,17 @@ INTERNAL_SKIP_PREFIXES = tuple(sorted(_EXCLUDED_SEGMENTS))
 # Internal top-level files that observe()/sync() must never index or absorb
 INTERNAL_SKIP_FILES = ("config.json",)
 
+# A credential signature found inside a CLOUD-SYNCED document is a security
+# finding in its own right: the value has left the machine. The same
+# signature inside a local agent transcript (~/.codex, ~/.claude) is not --
+# it never left. So the alert fires on source path, not on the finding.
+CLOUD_ALERT_ROOT = Path(os.environ.get(
+    "GARDENER_CLOUD_ROOT", os.path.expanduser("~/OneDrive")))
+CLOUD_ALERT_FILE = Path(os.environ.get(
+    "GARDENER_CLOUD_ALERT_FILE",
+    os.path.expanduser(
+        "~/OneDrive/.SYNC/laptop/SECURITY-ALERT_TOKEN-IN-ONEDRIVE.md")))
+
 
 # ---------------------------------------------------------------------------
 # Schema
@@ -1142,6 +1153,68 @@ class Gardener:
     # (fuer inkrementelles Tailing grosser JSONL-Transkripte) liegt in
     # einer separaten Laufzeitdatei in data_dir, nicht in der DB.
 
+    # ------------------------------------------------------------------
+    # Cloud credential alert
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_cloud_path(path) -> bool:
+        """True if `path` lies inside the cloud-synced root."""
+        if not path:
+            return False
+        try:
+            Path(path).resolve().relative_to(CLOUD_ALERT_ROOT.resolve())
+            return True
+        except (ValueError, OSError):
+            return False
+
+    @staticmethod
+    def record_cloud_alerts(findings) -> int:
+        """Appends new (path, family) findings to the alert file.
+
+        `findings` is an iterable of (source_path, families). Only the path
+        and the family name are ever written -- never the value and never
+        the surrounding text, because the alert file itself lives in the
+        cloud folder it is warning about.
+
+        Idempotent: a finding already listed is not appended again, so a
+        nightly refresh does not grow the file without new information.
+        Returns the number of newly written lines.
+        """
+        pairs = sorted({(str(p), f) for p, fams in findings for f in fams})
+        if not pairs:
+            return 0
+
+        path = CLOUD_ALERT_FILE
+        try:
+            existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        except OSError:
+            existing = ""
+
+        new = [(p, f) for p, f in pairs if f"`{p}` | {f}" not in existing]
+        if not new:
+            return 0
+
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "a", encoding="utf-8") as fh:
+                if not existing:
+                    fh.write(
+                        "# SICHERHEITSBEFUND: Token-Signatur in "
+                        "Cloud-Dokument\n\n"
+                        "Zugangsdaten gehoeren nicht in einen Cloud-Ordner. "
+                        "Jede Zeile ist ein Fund beim Indizieren.\n"
+                        "Es wird **nur der Fundort und die Muster-Familie** "
+                        "notiert -- nie der Wert, nie der umgebende Text.\n\n"
+                        "| Datum | Quellpfad | Muster-Familie |\n"
+                        "|---|---|---|\n")
+                stamp = datetime.now().isoformat(timespec="seconds")
+                for p, f in new:
+                    fh.write(f"| {stamp} | `{p}` | {f} |\n")
+        except OSError:
+            return 0
+        return len(new)
+
     def _observe_source_state_path(self) -> Path:
         return self.data_dir / "observe_sources_state.json"
 
@@ -1249,8 +1322,13 @@ class Gardener:
             # entry is always written with target='user', so it can only ever
             # live in user.db.
             conn = self._conn("user")
+            cloud_findings = []
             try:
                 for item in sources.scan(sid, cfg, state=file_state):
+                    if item.redacted:
+                        src = (item.meta.get("source_ref") or {}).get("path")
+                        if self._is_cloud_path(src):
+                            cloud_findings.append((src, item.redacted))
                     row = conn.execute(
                         "SELECT id, meta FROM main.everything WHERE name = ?",
                         (item.name,)).fetchone()
@@ -1297,6 +1375,17 @@ class Gardener:
                         conn.commit()
                 conn.commit()
                 stats[sid] = {"kind": kind, "indexed": indexed, "skipped": skipped}
+                if cloud_findings:
+                    written = self.record_cloud_alerts(cloud_findings)
+                    stats[sid]["cloud_alerts"] = len(cloud_findings)
+                    stats[sid]["cloud_alerts_new"] = written
+                    # Console warning: this is a security finding, not a
+                    # statistic. stderr so it stays visible even when a
+                    # sync run's stdout is piped into a log.
+                    print(f"WARNUNG [{sid}]: Token-Signatur in "
+                          f"{len(cloud_findings)} Cloud-Dokument(en) gefunden "
+                          f"-- {written} neu in {CLOUD_ALERT_FILE}",
+                          file=sys.stderr)
             except Exception as e:
                 # Eine kaputte Quellen-Konfiguration darf den Refresh der
                 # anderen Quellen nicht abreissen (gleiches Prinzip wie

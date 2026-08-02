@@ -54,13 +54,16 @@ This module has no dependency on gardener.py (and vice versa is only a
 thin wiring layer in ``Gardener.observe_source_*``), so adapters stay
 independently testable and reusable.
 """
+import fnmatch
 import glob
 import hashlib
+import io
 import json
 import os
 import platform
 import re
 import sqlite3
+import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -83,6 +86,9 @@ class SourceItem:
     tags: str
     meta: Dict[str, Any] = field(default_factory=dict)
     fingerprint: str = ""
+    # Credential families that were masked in `content` on the way in
+    # (see redact_secrets). Empty for the overwhelming majority of items.
+    redacted: tuple = ()
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +145,93 @@ def is_excluded(path) -> bool:
     if name in EXCLUDED_FILENAMES:
         return True
     return name.endswith(EXCLUDED_SUFFIXES)
+
+
+# ---------------------------------------------------------------------------
+# Secret redaction
+# ---------------------------------------------------------------------------
+#
+# The never-index list above keeps credential *stores* out of the index. It
+# cannot help with a token someone pasted into the middle of an agent
+# session -- that text is part of the transcript. So the text itself is
+# redacted on the way in: the pattern family stays readable, the value does
+# not survive.
+#
+# Deliberate semantics: an agent that needs the real token must go to the
+# SOURCE FILE. The index tells it where the token lives, never what it is.
+#
+# Patterns follow the documented formats used by GitHub secret scanning,
+# gitleaks (config/gitleaks.toml) and Yelp detect-secrets. Every one of them
+# anchors on a fixed length, a restricted character class, and where the
+# vendor provides one a literal marker ('T3BlbkFJ' = base64 "OpenAI", the
+# trailing 'AA' on Anthropic keys). That anchoring -- not the prefix alone --
+# is what keeps ordinary prose out: 'skalar', 'ghpx_abc', 'AKIAA', 'AIzaX'
+# and a bare 'Bearer' in a sentence all fail to match.
+#
+# Deliberately NOT included: entropy heuristics (detect-secrets'
+# Base64HighEntropyString, gitleaks' generic-api-key) and keyword detectors
+# ('password=', 'token='). Both are documented high-recall/low-precision and
+# would black out hashes, UUIDs, commit ids and ordinary config prose. A
+# redaction step that runs unattended must not guess.
+
+REDACTION_MARKER = "***REDACTED***"
+
+# (family, regex). Group 1 of every pattern is the recognisable prefix that
+# survives redaction; everything the pattern matches beyond it is replaced.
+SECRET_PATTERNS = (
+    ("anthropic-api-key",
+     re.compile(r"(sk-ant-api03-)[A-Za-z0-9_-]{93}AA\b")),
+    ("openai-project-key",
+     re.compile(r"(sk-(?:proj|svcacct|admin)-)[A-Za-z0-9_-]{20,}"
+                r"T3BlbkFJ[A-Za-z0-9_-]{20,}\b")),
+    ("openai-api-key",
+     re.compile(r"(sk-)[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}\b")),
+    ("github-token",
+     re.compile(r"\b(gh[pours]_)[A-Za-z0-9_]{36,520}\b")),
+    ("github-fine-grained-pat",
+     re.compile(r"\b(github_pat_)[A-Za-z0-9]{22}_[A-Za-z0-9]{59}\b")),
+    # gitleaks narrows the body to base32 ([A-Z2-7]), which would let a real
+    # key containing 0/1/8/9 through. For a redaction step, missing a live
+    # secret is the worse error, so this follows detect-secrets' wider
+    # [0-9A-Z]{16}. The four-character prefix plus the exact length of 20
+    # still keeps it off ordinary prose.
+    ("aws-access-key-id",
+     re.compile(r"\b(A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b")),
+    ("slack-token",
+     re.compile(r"\b(xox[baprse]-)[0-9A-Za-z-]{20,}\b")),
+    ("slack-app-token",
+     re.compile(r"\b(xapp-)[0-9A-Za-z-]{20,}\b")),
+    ("google-api-key",
+     re.compile(r"\b(AIza)[A-Za-z0-9_-]{35}\b")),
+    ("gitlab-pat",
+     re.compile(r"\b(glpat-)[A-Za-z0-9_.-]{20,300}\b")),
+    ("npm-token",
+     re.compile(r"\b(npm_)[A-Za-z0-9]{36}\b")),
+    ("http-bearer",
+     re.compile(r"(?i)(authorization\s*:\s*bearer\s+)"
+                r"[A-Za-z0-9\-_.~+/]{20,}={0,2}")),
+    ("private-key-block",
+     re.compile(r"(-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----)"
+                r"[\s\S]{32,}?-----END (?:[A-Z0-9 ]+ )?PRIVATE KEY-----")),
+)
+
+
+def redact_secrets(text: str):
+    """Masks credential signatures in `text`.
+
+    Returns ``(redacted_text, families)`` -- `families` is a sorted tuple of
+    the pattern families that fired, empty when the text was clean. Callers
+    use it to raise an alert without ever handling the value itself.
+    """
+    if not text or not isinstance(text, str):
+        return text, ()
+    found = set()
+    for family, pattern in SECRET_PATTERNS:
+        def _mask(m, _f=family):
+            found.add(_f)
+            return f"{m.group(1)}{REDACTION_MARKER}"
+        text = pattern.sub(_mask, text)
+    return text, tuple(sorted(found))
 
 
 # ---------------------------------------------------------------------------
@@ -716,13 +809,16 @@ def scan_agent_transcripts(source_id: str, config: Dict,
     if not path_patterns:
         return
     key_by = config.get("key_by", "path")
-    fmt = config.get("format", "claude_code")
-    roles = set(config.get("roles", ["user", "assistant"]))
-    include_sidechain = bool(config.get("include_sidechain", False))
-    role_field = config.get("role_field", "message.role")
-    text_field = config.get("text_field", "message.content")
-    text_block_type = config.get("text_block_type", "text")
-    default_role = config.get("default_role")
+    opts = {
+        "fmt": config.get("format", "claude_code"),
+        "roles": set(config.get("roles", ["user", "assistant"])),
+        "include_sidechain": bool(config.get("include_sidechain", False)),
+        "role_field": config.get("role_field", "message.role"),
+        "text_field": config.get("text_field", "message.content"),
+        "text_block_type": config.get("text_block_type", "text"),
+        "default_role": config.get("default_role"),
+        "zip_inner": config.get("zip_inner"),
+    }
 
     seen_files = set()
     candidates = []
@@ -741,6 +837,11 @@ def scan_agent_transcripts(source_id: str, config: Dict,
         try:
             stat = file_path.stat()
         except OSError:
+            continue
+
+        if file_path.suffix.lower() == ".zip":
+            yield from _scan_zip_transcripts(
+                source_id, file_path, stat, opts, state)
             continue
 
         file_key = file_path.name if key_by == "name" else _path_key(file_path)
@@ -779,60 +880,11 @@ def scan_agent_transcripts(source_id: str, config: Dict,
                     except json.JSONDecodeError:
                         continue
 
-                    if fmt == "claude_code":
-                        if not include_sidechain and entry.get("isSidechain"):
-                            continue
-                        role, text = _extract_claude_code_text(entry)
-                    elif fmt in ("gemini_antigravity", "antigravity", "gemini"):
-                        role, text = _extract_gemini_antigravity_text(entry)
-                    elif fmt == "codex":
-                        role, text = _extract_codex_text(entry)
-                    elif fmt == "kimi":
-                        role, text = _extract_kimi_text(entry)
-                    else:
-                        role, text = _extract_generic_text(
-                            entry, role_field, text_field, text_block_type,
-                            default_role)
-
-                    if role is None or role not in roles:
-                        continue
-
-                    uuid_val = entry.get("uuid") or entry.get("turn_id")
-                    if not uuid_val and isinstance(entry.get("payload"), dict):
-                        uuid_val = entry["payload"].get("id") or entry["payload"].get("turn_id")
-                    item_key = uuid_val if uuid_val else (f"step_{entry['step_index']}" if isinstance(entry, dict) and "step_index" in entry else f"L{line_no}")
-
-                    session_val = entry.get("sessionId") or entry.get("session_id")
-                    if not session_val and isinstance(entry.get("payload"), dict):
-                        session_val = entry["payload"].get("id")
-                    session = str(session_val) if session_val else file_path.stem
-
-                    ts_val = entry.get("timestamp") or entry.get("created_at") or entry.get("ts")
-                    if not ts_val and isinstance(entry.get("payload"), dict):
-                        ts_val = entry["payload"].get("timestamp") or entry["payload"].get("started_at")
-                    timestamp = str(ts_val) if ts_val is not None else ""
-
-                    yield SourceItem(
-                        key=f"{file_key}#{item_key}",
-                        name=(f"observed/{source_id}/"
-                              f"{_safe_key(file_key)}/{_safe_key(item_key)}"),
-                        content=text,
-                        tags=f"agent_transcript,{source_id},{role}",
-                        meta={
-                            "source_ref": {
-                                "kind": "agent_transcripts",
-                                "path": str(file_path),
-                                "line": line_no,
-                                "role": role,
-                                "session": session,
-                                "uuid": uuid_val,
-                            },
-                            "timestamp": timestamp,
-                        },
-                        fingerprint=hashlib.sha256(
-                            text.encode("utf-8", "replace")
-                        ).hexdigest()[:16],
-                    )
+                    item = _transcript_item(
+                        entry, source_id, opts, file_key,
+                        str(file_path), file_path.stem, line_no)
+                    if item is not None:
+                        yield item
         except OSError:
             continue
 
@@ -842,6 +894,145 @@ def scan_agent_transcripts(source_id: str, config: Dict,
             "size": stat.st_size,
             "line_no": line_no,
         }
+
+
+def _transcript_item(entry: Dict, source_id: str, opts: Dict, file_key: str,
+                     display_path: str, fallback_session: str,
+                     line_no: int) -> Optional[SourceItem]:
+    """Turns one parsed JSONL entry into a SourceItem, or None.
+
+    Shared by the plain-file and the zip-member path so the two cannot
+    drift apart in how they extract, name and cite a turn.
+    """
+    fmt = opts["fmt"]
+    if fmt == "claude_code":
+        if not opts["include_sidechain"] and entry.get("isSidechain"):
+            return None
+        role, text = _extract_claude_code_text(entry)
+    elif fmt in ("gemini_antigravity", "antigravity", "gemini"):
+        role, text = _extract_gemini_antigravity_text(entry)
+    elif fmt == "codex":
+        role, text = _extract_codex_text(entry)
+    elif fmt == "kimi":
+        role, text = _extract_kimi_text(entry)
+    else:
+        role, text = _extract_generic_text(
+            entry, opts["role_field"], opts["text_field"],
+            opts["text_block_type"], opts["default_role"])
+
+    if role is None or role not in opts["roles"]:
+        return None
+
+    uuid_val = entry.get("uuid") or entry.get("turn_id")
+    if not uuid_val and isinstance(entry.get("payload"), dict):
+        uuid_val = entry["payload"].get("id") or entry["payload"].get("turn_id")
+    item_key = uuid_val if uuid_val else (
+        f"step_{entry['step_index']}"
+        if isinstance(entry, dict) and "step_index" in entry
+        else f"L{line_no}")
+
+    session_val = entry.get("sessionId") or entry.get("session_id")
+    if not session_val and isinstance(entry.get("payload"), dict):
+        session_val = entry["payload"].get("id")
+    session = str(session_val) if session_val else fallback_session
+
+    ts_val = (entry.get("timestamp") or entry.get("created_at")
+              or entry.get("ts"))
+    if not ts_val and isinstance(entry.get("payload"), dict):
+        ts_val = (entry["payload"].get("timestamp")
+                  or entry["payload"].get("started_at"))
+    timestamp = str(ts_val) if ts_val is not None else ""
+
+    return SourceItem(
+        key=f"{file_key}#{item_key}",
+        name=(f"observed/{source_id}/"
+              f"{_safe_key(file_key)}/{_safe_key(item_key)}"),
+        content=text,
+        tags=f"agent_transcript,{source_id},{role}",
+        meta={
+            "source_ref": {
+                "kind": "agent_transcripts",
+                "path": display_path,
+                "line": line_no,
+                "role": role,
+                "session": session,
+                "uuid": uuid_val,
+            },
+            "timestamp": timestamp,
+        },
+        fingerprint=hashlib.sha256(
+            text.encode("utf-8", "replace")).hexdigest()[:16],
+    )
+
+
+def _scan_zip_transcripts(source_id: str, zip_path: Path, stat, opts: Dict,
+                          state: Dict) -> Iterator[SourceItem]:
+    """Indexes JSONL transcripts that live INSIDE a zip archive.
+
+    Read streaming through `zipfile`; the archive is never unpacked to
+    disk. Incrementality works per archive rather than per byte offset:
+    an archive is a finished thing, so an unchanged (mtime, size) means
+    nothing inside it changed either and the whole file is skipped
+    without being opened.
+
+    Members are matched against `zip_inner` (default: any *.jsonl).
+    Archives that hold no matching member -- Antigravity switched its
+    conversation archives to SQLite+protobuf, which carry no JSONL at
+    all -- simply yield nothing instead of needing a special case.
+    """
+    zip_key = f"zip:{zip_path.name}"
+    prev = state.get(zip_key, {})
+    if (prev.get("mtime") == stat.st_mtime
+            and prev.get("size") == stat.st_size):
+        return
+
+    inner_pattern = opts.get("zip_inner") or "*.jsonl"
+    members_seen = 0
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                member = info.filename
+                if not fnmatch.fnmatch(member, inner_pattern):
+                    continue
+                if is_excluded(member):
+                    continue
+                members_seen += 1
+                # file_key must stay stable and unique across archives:
+                # the same session can appear in two archive generations.
+                file_key = f"{zip_path.name}!{member}"
+                display = f"{zip_path}!{member}"
+                fallback_session = Path(member).parent.name or Path(member).stem
+                line_no = 0
+                try:
+                    with zf.open(info) as raw:
+                        stream = io.TextIOWrapper(
+                            raw, encoding="utf-8", errors="replace")
+                        for raw_line in stream:
+                            line_no += 1
+                            line = raw_line.strip()
+                            if not line:
+                                continue
+                            try:
+                                entry = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+                            item = _transcript_item(
+                                entry, source_id, opts, file_key,
+                                display, fallback_session, line_no)
+                            if item is not None:
+                                yield item
+                except (OSError, zipfile.BadZipFile, RuntimeError):
+                    continue
+    except (OSError, zipfile.BadZipFile):
+        return
+
+    state[zip_key] = {
+        "mtime": stat.st_mtime,
+        "size": stat.st_size,
+        "members": members_seen,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -866,6 +1057,16 @@ def scan(source_id: str, config: Dict,
     need incremental byte-offset tracking; currently agent_transcripts.
     Other adapters ignore it -- they already skip unchanged items via
     per-item fingerprints (mtime+size, or a content hash).
+
+    Secret redaction happens HERE rather than in each adapter: this is the
+    one gate every item passes through, so a future adapter cannot forget
+    it. `item.redacted` carries the families that fired, for the caller to
+    raise an alert on.
+
+    Fingerprints are deliberately left as the adapter computed them, i.e.
+    over the ORIGINAL text. They answer "has the source changed since last
+    time", and the source is the unredacted file -- rewriting them would
+    invalidate every stored fingerprint and force a full re-index.
     """
     kind = config.get("kind")
     adapter = ADAPTERS.get(kind)
@@ -875,9 +1076,15 @@ def scan(source_id: str, config: Dict,
             f"(gueltig: {', '.join(VALID_KINDS)})"
         )
     if kind == "agent_transcripts":
-        yield from adapter(source_id, config, state=state)
+        items = adapter(source_id, config, state=state)
     else:
-        yield from adapter(source_id, config)
+        items = adapter(source_id, config)
+
+    for item in items:
+        item.content, families = redact_secrets(item.content)
+        if families:
+            item.redacted = families
+        yield item
 
 
 # ---------------------------------------------------------------------------

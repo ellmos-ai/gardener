@@ -2,6 +2,7 @@ import importlib
 import gc
 import json
 import os
+import re
 import sqlite3
 import tempfile
 import time
@@ -930,6 +931,266 @@ class TestNeverIndexList(ObserveSourceTestCase):
         self.assertTrue(gardener_mod.Gardener._is_internal("CREDENTIALS/x.md"))
         self.assertTrue(gardener_mod.Gardener._is_internal("projekt/.npmrc"))
         self.assertFalse(gardener_mod.Gardener._is_internal("notizen/plan.md"))
+
+
+class TestSecretRedaction(ObserveSourceTestCase):
+    """Credential signatures are masked on the way into the index.
+
+    All token bodies below are FAKE -- shaped like the real formats
+    (right prefix, right length, right character class, right literal
+    markers) so the patterns are exercised, but not valid credentials.
+    """
+
+    # (family, sample containing a fake token)
+    POSITIVES = [
+        ("anthropic-api-key", "sk-ant-api03-" + "A1b2C3d4_-" * 9 + "xyz" + "AA"),
+        ("openai-api-key", "sk-" + "a" * 20 + "T3BlbkFJ" + "b" * 20),
+        ("openai-project-key",
+         "sk-proj-" + "c" * 30 + "T3BlbkFJ" + "d" * 30),
+        ("github-token", "ghp_" + "e" * 36),
+        ("github-fine-grained-pat",
+         "github_pat_" + "f" * 22 + "_" + "g" * 59),
+        ("aws-access-key-id", "AKIA" + "ABCDEFGH23456789"),
+        ("slack-token", "xoxb-" + "1234567890-9876543210-abcdefgh"),
+        ("google-api-key", "AIza" + "h" * 35),
+        ("gitlab-pat", "glpat-" + "i" * 20),
+        ("npm-token", "npm_" + "j" * 36),
+        ("http-bearer", "Authorization: Bearer " + "k" * 30),
+        ("private-key-block",
+         "-----BEGIN RSA PRIVATE KEY-----\n" + "l" * 64
+         + "\n-----END RSA PRIVATE KEY-----"),
+    ]
+
+    # Harmless look-alikes that must survive untouched.
+    NEGATIVES = [
+        "ghpx_abcdefghijklmnopqrstuvwxyz0123456789",   # 4 letters before _
+        "Aski",
+        "AKIAA",                                        # far too short
+        "skalar und sk- allein",
+        "Der Bearer des Rings",                         # no header, no body
+        "AIzaX",                                        # too short
+        "npm_install",                                  # too short
+        "glpat-kurz",
+    ]
+
+    def _write_jsonl(self, path, lines):
+        path.write_text(
+            "\n".join(json.dumps(x, ensure_ascii=False) for x in lines) + "\n",
+            encoding="utf-8")
+
+    def test_positives_are_masked_and_family_reported(self):
+        import sources
+        for family, sample in self.POSITIVES:
+            with self.subTest(family=family):
+                out, families = sources.redact_secrets(
+                    f"vorher {sample} nachher")
+                self.assertIn(sources.REDACTION_MARKER, out)
+                self.assertIn(family, families)
+                # Surrounding prose survives; the secret body does not.
+                self.assertIn("vorher", out)
+                self.assertIn("nachher", out)
+                # The high-entropy run inside the sample must be gone.
+                secret_run = max(re.findall(r"[A-Za-z0-9_-]{12,}", sample),
+                                 key=len)
+                self.assertNotIn(secret_run, out)
+
+    def test_negatives_are_left_alone(self):
+        import sources
+        for sample in self.NEGATIVES:
+            with self.subTest(sample=sample):
+                out, families = sources.redact_secrets(sample)
+                self.assertEqual(out, sample)
+                self.assertEqual(families, ())
+
+    def test_prefix_stays_readable_so_the_family_is_recognisable(self):
+        import sources
+        out, _ = sources.redact_secrets("ghp_" + "e" * 36)
+        self.assertTrue(out.startswith("ghp_"))
+        self.assertEqual(out, "ghp_" + sources.REDACTION_MARKER)
+
+    def test_redaction_reaches_the_index_through_every_adapter(self):
+        """scan() is the gate, so markdown and transcripts are both covered."""
+        token = "ghp_" + "e" * 36
+        md_dir = self.foreign / "docs"
+        md_dir.mkdir(parents=True, exist_ok=True)
+        (md_dir / "notiz.md").write_text(
+            f"Zugang Merkposten {token} Ende", encoding="utf-8")
+        jsonl = self.foreign / "chat.jsonl"
+        self._write_jsonl(jsonl, [
+            {"type": "event_msg", "payload": {
+                "type": "user_message",
+                "message": f"Merkposten Schluessel {token}"}},
+        ])
+
+        self.af.observe_source_add("docs", "markdown_dir", path=str(md_dir))
+        self.af.observe_source_add("chat", "agent_transcripts",
+                                   path=str(jsonl), format="codex")
+        self.af.observe_sources("docs")
+        self.af.observe_sources("chat")
+
+        hits = self.af.find("Merkposten")
+        self.assertEqual(len(hits), 2)
+        for hit in hits:
+            self.assertNotIn("e" * 36, hit["content"])
+            self.assertIn("ghp_***REDACTED***", hit["content"])
+
+    def test_clean_text_is_untouched_and_reports_nothing(self):
+        import sources
+        text = "Ein ganz gewoehnlicher Satz ueber Schluessel und Tokens."
+        out, families = sources.redact_secrets(text)
+        self.assertEqual(out, text)
+        self.assertEqual(families, ())
+
+
+class TestCloudCredentialAlert(ObserveSourceTestCase):
+    """A token inside a cloud-synced document is its own security finding."""
+
+    def _point_alert_at(self, root, alert_file):
+        self.gardener.CLOUD_ALERT_ROOT = root
+        self.gardener.CLOUD_ALERT_FILE = alert_file
+
+    def test_alert_written_for_cloud_path_and_is_idempotent(self):
+        cloud = self.foreign / "CloudDrive"
+        cloud.mkdir(parents=True, exist_ok=True)
+        alert = self.foreign / "alert.md"
+        self._point_alert_at(cloud, alert)
+
+        (cloud / "notiz.md").write_text(
+            "Zugangsdaten Merkposten ghp_" + "e" * 36, encoding="utf-8")
+        self.af.observe_source_add("cloud", "markdown_dir", path=str(cloud))
+
+        stats = self.af.observe_sources("cloud")
+        self.assertEqual(stats["cloud"]["cloud_alerts"], 1)
+        self.assertEqual(stats["cloud"]["cloud_alerts_new"], 1)
+
+        body = alert.read_text(encoding="utf-8")
+        self.assertIn("github-token", body)
+        self.assertIn("notiz.md", body)
+        # Never the value, never the surrounding text.
+        self.assertNotIn("e" * 36, body)
+        self.assertNotIn("Merkposten", body)
+
+        # Second run over the same finding must not append a duplicate.
+        (cloud / "notiz.md").write_text(
+            "Zugangsdaten Merkposten ghp_" + "e" * 36 + " (ergaenzt)",
+            encoding="utf-8")
+        stats2 = self.af.observe_sources("cloud")
+        self.assertEqual(stats2["cloud"]["cloud_alerts_new"], 0)
+        self.assertEqual(alert.read_text(encoding="utf-8").count("github-token"), 1)
+
+    def test_local_path_finding_raises_no_alert(self):
+        """A token in a local transcript never left the machine."""
+        cloud = self.foreign / "CloudDrive"
+        cloud.mkdir(parents=True, exist_ok=True)
+        alert = self.foreign / "alert.md"
+        self._point_alert_at(cloud, alert)
+
+        local = self.foreign / "local"
+        local.mkdir(parents=True, exist_ok=True)
+        (local / "notiz.md").write_text(
+            "Merkposten ghp_" + "e" * 36, encoding="utf-8")
+        self.af.observe_source_add("local", "markdown_dir", path=str(local))
+
+        stats = self.af.observe_sources("local")
+        self.assertNotIn("cloud_alerts", stats["local"])
+        self.assertFalse(alert.exists())
+        # Redaction still happened -- only the ALERT is path-scoped.
+        hits = self.af.find("Merkposten")
+        self.assertEqual(len(hits), 1)
+        self.assertNotIn("e" * 36, hits[0]["content"])
+
+
+class TestZipTranscriptSource(ObserveSourceTestCase):
+    """Archived transcripts are read streaming, never unpacked to disk."""
+
+    def _make_zip(self, path, members):
+        import zipfile
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for name, lines in members.items():
+                zf.writestr(name, "\n".join(json.dumps(x) for x in lines) + "\n")
+
+    def test_indexes_jsonl_members_streaming(self):
+        zpath = self.foreign / "brain_history.zip"
+        self._make_zip(zpath, {
+            "abc-123/.system_generated/logs/transcript.jsonl": [
+                {"step_index": 0, "source": "USER_EXPLICIT",
+                 "type": "USER_INPUT", "content": "Archivfrage stellen."},
+                {"step_index": 1, "source": "MODEL",
+                 "type": "PLANNER_RESPONSE",
+                 "content": "Archivfrage beantwortet."},
+                # Tool step -- must be skipped like everywhere else.
+                {"step_index": 2, "source": "MODEL", "type": "RUN_COMMAND",
+                 "content": "Archivfrage Kommando-Output"},
+            ],
+            "abc-123/task.md": [],   # non-JSONL member, must be ignored
+        })
+
+        self.af.observe_source_add(
+            "gemini-archive", "agent_transcripts", path=str(zpath),
+            format="gemini_antigravity", zip_inner="*/logs/transcript.jsonl")
+        res = self.af.observe_sources("gemini-archive")
+        self.assertEqual(res["gemini-archive"]["indexed"], 2)
+
+        hits = self.af.find("Archivfrage")
+        self.assertEqual(len(hits), 2)
+        ref = hits[0]["meta"]["source_ref"]["path"]
+        self.assertIn("brain_history.zip!", ref)
+        # Nothing was unpacked next to the archive.
+        self.assertEqual(
+            sorted(p.name for p in self.foreign.iterdir()),
+            ["brain_history.zip"])
+
+    def test_unchanged_archive_is_skipped_whole(self):
+        zpath = self.foreign / "arch.zip"
+        self._make_zip(zpath, {
+            "s1/logs/transcript.jsonl": [
+                {"source": "USER_EXPLICIT", "type": "USER_INPUT",
+                 "content": "Wiederholungsfall."}],
+        })
+        self.af.observe_source_add(
+            "arch", "agent_transcripts", path=str(zpath),
+            format="gemini_antigravity", zip_inner="*/logs/transcript.jsonl")
+
+        first = self.af.observe_sources("arch")
+        self.assertEqual(first["arch"]["indexed"], 1)
+        second = self.af.observe_sources("arch")
+        # Neither indexed nor even re-read: the archive is skipped whole.
+        self.assertEqual(second["arch"]["indexed"], 0)
+        self.assertEqual(second["arch"]["skipped"], 0)
+        self.assertEqual(len(self.af.find("Wiederholungsfall")), 1)
+
+    def test_archive_without_matching_members_yields_nothing(self):
+        """Antigravity's newer archives hold SQLite/protobuf, no JSONL."""
+        zpath = self.foreign / "newformat.zip"
+        import zipfile
+        with zipfile.ZipFile(zpath, "w") as zf:
+            zf.writestr("conversations/abc.db", b"SQLite format 3\x00rest")
+            zf.writestr("conversations/abc.pb", b"\x08\x0e \x03*\x9a\x01")
+
+        self.af.observe_source_add(
+            "newformat", "agent_transcripts", path=str(zpath),
+            format="gemini_antigravity", zip_inner="*/logs/transcript.jsonl")
+        res = self.af.observe_sources("newformat")
+        self.assertEqual(res["newformat"]["indexed"], 0)
+        self.assertNotIn("error", res["newformat"])
+
+    def test_redaction_applies_inside_archives_too(self):
+        zpath = self.foreign / "secret.zip"
+        token = "ghp_" + "e" * 36
+        self._make_zip(zpath, {
+            "s1/logs/transcript.jsonl": [
+                {"source": "USER_EXPLICIT", "type": "USER_INPUT",
+                 "content": f"Archivgeheimnis {token}"}],
+        })
+        self.af.observe_source_add(
+            "zsec", "agent_transcripts", path=str(zpath),
+            format="gemini_antigravity", zip_inner="*/logs/transcript.jsonl")
+        self.af.observe_sources("zsec")
+
+        hits = self.af.find("Archivgeheimnis")
+        self.assertEqual(len(hits), 1)
+        self.assertNotIn("e" * 36, hits[0]["content"])
+        self.assertIn("ghp_***REDACTED***", hits[0]["content"])
 
 
 if __name__ == "__main__":
