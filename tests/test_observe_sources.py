@@ -107,6 +107,33 @@ class TestMarkdownDirSource(ObserveSourceTestCase):
 
 
 class TestMarkdownDirPatterns(ObserveSourceTestCase):
+    def test_repo_llms_source_keeps_repo_name_and_tags(self):
+        repos = self.foreign / "repos"
+        repo = repos / "roshambo"
+        repo.mkdir(parents=True, exist_ok=True)
+        (repo / "llms.txt").write_text(
+            "# Roshambo\n\nUniqueRepoModule: BedrockEmbedder.",
+            encoding="utf-8",
+        )
+
+        self.af.observe_source_add(
+            "repo-llms-txt", "markdown_dir", path=str(repos / "*"),
+            patterns=["llms.txt"], extra_tags=["llms-txt", "repo-docs"])
+        result = self.af.observe_sources("repo-llms-txt")
+        self.assertEqual(result["repo-llms-txt"]["indexed"], 1)
+
+        hits = self.af.find("UniqueRepoModule")
+        self.assertEqual(len(hits), 1)
+        hit = hits[0]
+        self.assertTrue(
+            hit["name"].endswith("repos/roshambo/llms.txt"))
+        self.assertIn("llms-txt", hit["tags"])
+        self.assertIn("repo-docs", hit["tags"])
+        self.assertEqual(
+            hit["meta"]["source_ref"]["path"],
+            str(repo / "llms.txt"),
+        )
+
     def test_default_patterns_only_match_markdown(self):
         mem_dir = self.foreign / "memory"
         mem_dir.mkdir(parents=True, exist_ok=True)
