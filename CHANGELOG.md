@@ -1,5 +1,214 @@
 # Changelog
 
+## 2026-08-02 (later)
+
+Secrets are now redacted on the way into the index, a credential found in a
+cloud-synced document raises an alert, and archived transcripts are read
+straight out of their zip.
+
+- **Secret redaction (`sources.redact_secrets`)**, applied in `scan()` --
+  the one gate every adapter's items pass through, so a future adapter
+  cannot forget it. The pattern family stays readable
+  (`ghp_***REDACTED***`), the value does not survive.
+  **Deliberate semantics: an agent that needs the real token must go to
+  the source file. The index says where a credential lives, never what it
+  is.**
+  - 13 families, following the documented formats used by GitHub secret
+    scanning, gitleaks and Yelp detect-secrets: Anthropic, OpenAI (legacy
+    and project/service/admin keys), GitHub PAT classic + fine-grained,
+    AWS access key ids, Slack bot/user/app tokens, Google API keys, GitLab
+    PATs, npm tokens, `Authorization: Bearer` headers, and PEM private-key
+    blocks.
+  - Every pattern anchors on a fixed length, a restricted character class
+    and -- where the vendor provides one -- a literal marker (`T3BlbkFJ`,
+    the trailing `AA` on Anthropic keys). That anchoring, not the prefix,
+    is what keeps prose out: `skalar`, `ghpx_…`, `AKIAA`, `AIzaX`, `npm_install`
+    and a bare "Bearer" in a sentence are all left alone (asserted).
+  - AWS bodies match `[A-Z0-9]{16}`, not gitleaks' base32 `[A-Z2-7]{16}`:
+    the narrower class would let a real key containing 0/1/8/9 through,
+    and for a redaction step missing a live secret is the worse error.
+  - Deliberately **not** included: entropy heuristics and keyword
+    detectors (`password=`). Both are documented high-recall/low-precision
+    and would black out hashes, UUIDs and ordinary config prose. A step
+    that runs unattended must not guess.
+  - Fingerprints stay computed over the original text -- they answer "has
+    the source changed", and the source is the unredacted file. Rewriting
+    them would invalidate every stored fingerprint and force a full
+    re-index.
+- **Cloud credential alert.** A signature found in a file under
+  `~/OneDrive` (override: `GARDENER_CLOUD_ROOT`) is a security finding in
+  its own right -- the value has left the machine. One line per finding is
+  appended to `SECURITY-ALERT_TOKEN-IN-ONEDRIVE.md`
+  (`GARDENER_CLOUD_ALERT_FILE`) with date, source path and family --
+  **never the value and never the surrounding text**, because the alert
+  file lives in the very folder it warns about. Idempotent: a finding
+  already listed is not appended again. A signature in a *local* transcript
+  (`~/.codex`, `~/.claude`) raises no alert -- it never left. Findings are
+  also reported in `observe_sources()`' stats and warned about on stderr.
+- **Zip archives as a transcript source.** `agent_transcripts` reads JSONL
+  members straight out of a `.zip` via `zipfile`; nothing is unpacked to
+  disk. `zip_inner` selects members (default `*.jsonl`). Incrementality is
+  per archive rather than per byte offset -- an archive is a finished
+  thing, so an unchanged (mtime, size) skips the whole file unopened.
+  Archives holding no matching member simply yield nothing.
+- Refactor: the per-line work of `scan_agent_transcripts` moved into
+  `_transcript_item()`, shared by the plain-file and zip paths so the two
+  cannot drift apart in how they extract, name and cite a turn.
+- Tests: +11 (redaction positives per family, look-alike negatives,
+  prefix-stays-readable, redaction reaching the index through both a
+  markdown and a transcript source, alert written/idempotent, local path
+  raising no alert, zip indexing/incremental-skip/no-matching-member, and
+  redaction inside archives). 74 -> 85.
+
+Measured on this machine: retroactive sweep of the existing 284232 entries
+found **6** real credentials (4 npm tokens, 2 AWS key ids), all in local
+Codex transcripts, all pasted into sessions by hand -- context like
+``//registry.npmjs.org/:_authToken=npm_…`` leaves no doubt they were
+genuine. All 6 redacted in place; 0 unredacted matches remain. Cloud alert
+initial sweep: **0** findings among indexed OneDrive documents.
+`gemini-archive` (the Antigravity conversation archives) indexed 3805
+entries from 102 `transcript.jsonl` members in 4.3 s; second run 0.2 s.
+
+## 2026-08-02
+
+Every agent provider on the machine is now in one search -- and the three
+transcript presets added yesterday are corrected against the formats they
+actually claim to read. All three were written from assumption, not from
+the files; measured against real transcripts, two indexed nothing at all
+and one indexed mostly noise.
+
+- **`codex` preset rewritten.** A Codex rollout carries the same
+  conversation twice: `event_msg` (`payload.type` 'user_message' /
+  'agent_message', text in a flat `payload.message`) and `response_item`
+  (the raw model exchange). The old preset read only the second one --
+  duplicating every assistant turn verbatim, pulling injected
+  AGENTS.md/skill boilerplate in as "user" text, and missing the clean
+  channel entirely. Now only `event_msg` is indexed.
+- **`codex` preset also drops sub-agent tool traffic.** When Codex
+  delegates, it wraps the sub-agent's tool calls and their output into
+  ordinary `agent_message` events prefixed `[external_agent_tool_call:
+  Read]` / `[external_agent_tool_result]`. The payload is a verbatim
+  file dump, command stderr or diff -- prose everywhere else in this
+  module is what gets indexed, and this is not it. Measured on a real
+  archive: **49,286 of 309,883 indexed Codex turns (15.9%)** were tool
+  traffic.
+- **`kimi` preset rewritten.** It looked for a `TurnBegin` wrapper and
+  flat top-level `role`/`content` strings; neither exists in a real
+  `wire.jsonl`, so the preset returned nothing for every line of every
+  file. Kimi's wire log is an event stream: agent prose arrives as
+  `context.append_loop_event` -> `content.part` (`part.type='text'`,
+  while `'think'` parts are internal reasoning), user turns as
+  `context.append_message` with `message.origin.kind='user'`. That
+  origin check matters -- roughly two thirds of user-role messages are
+  injected reminders, cron firings and hook results.
+- **`gemini_antigravity` preset narrowed.** It treated any
+  `source == "MODEL"` step as an assistant turn, which also matches
+  VIEW_FILE, RUN_COMMAND, LIST_DIRECTORY, GREP_SEARCH and CODE_ACTION --
+  file dumps, command output and diffs, i.e. exactly the tool noise the
+  Claude Code extractor skips on purpose. Only `PLANNER_RESPONSE` counts
+  now.
+- **`path` may be a list of glob patterns**, and `agent_transcripts`
+  takes **`key_by: 'name'`**. Together they solve transcript rotation:
+  Codex moves finished rollouts from `sessions/` to
+  `archived_sessions/`, and with a path-keyed state the same file came
+  back as a new key, was re-read from offset 0 and landed in the index a
+  second time under a second name. One source spanning both directories,
+  keyed on the (globally unique) filename, keeps a moved file's identity.
+- **Never-index list (`sources.EXCLUDED_PATH_SEGMENTS` /
+  `EXCLUDED_FILENAMES` / `EXCLUDED_SUFFIXES`, `sources.is_excluded()`)**,
+  enforced per file inside the adapters, so an over-broad or mistyped
+  glob cannot pull credentials into the index: `CREDENTIALS/`, `.ssh`,
+  `.gnupg`, `.gardener` itself, `node_modules`, `.git`, `.venv`,
+  `__pycache__`, and files like `.npmrc`, `.env`, `auth.json`, `*.pem`,
+  `*.key`. Segments are matched whole, so a sibling named
+  `credentials-howto.md` is not caught. `gardener.py` derives
+  `INTERNAL_SKIP_PREFIXES` from that same list -- one list to maintain,
+  and what a source adapter refuses to read, the home-folder walk
+  refuses too.
+- **`observe_sources()` batches its writes.** It used to spend three
+  connections per item (a `get`, `put`'s own, and `put`'s return `get`),
+  each opening the DB, ATTACHing the sibling and committing -- about 20
+  items/s, which is days for a six-figure transcript archive. It now
+  holds one connection per source and commits every 2000 items. Same
+  upsert, same FTS (trigger-maintained), same per-item fingerprint skip.
+- **New sources:** `codex-sessions` (rollouts across `sessions/` +
+  `archived_sessions/`), `codex-history` (the flat cross-session prompt
+  history), `gemini-transcripts` (one `transcript.jsonl` per `brain/`
+  session), `gemini-automations` (the `automation.toml` prompts),
+  `kimi-transcripts` (`wire.jsonl` per agent per session).
+  `decisions-archive` widened to `*.txt` -- the archived decision files
+  are mostly `.txt`, so only the `.md` minority was being indexed.
+- Deliberately **not** indexed, with reason: Antigravity's
+  `conversations/*.db` (content columns are Protobuf BLOBs, not text),
+  `agyhub_summaries_proto.pb` and `annotations/*.pbtxt` (binary/Protobuf),
+  `brain/*/.git` (code snapshots, not conversation), and
+  `transcript_full.jsonl` (same turns as `transcript.jsonl`, ~1.6x the
+  bytes -- indexing both would duplicate every session).
+- `rinnsal-tasks` stays registered and returns 0: both
+  `~/.rinnsal/rinnsal.db` and `scanner_tasks.db` exist, and their
+  `rinnsal_tasks` table is genuinely empty. Nothing to fix.
+- Tests: +6 (never-index list across segments/filenames/suffixes, the
+  two adapters honouring it, the shared list reaching `gardener.py`,
+  Gemini tool-step filtering, and a rotation test that moves a file
+  between directories and asserts nothing is re-indexed). Corrected the
+  two presets' tests, which had asserted the invented formats, and
+  extended the Codex one to cover sub-agent tool traffic. 67 -> 73.
+
+Measured on this machine after the change: 43 sources, `everything`
+14293 -> 284232, `user.db` 57 MB -> 529 MB. The bulk is
+`codex-sessions` (260597) -- 4663 rollouts across `sessions/` and
+`archived_sessions/`, 10.4 GB of raw JSONL. First scan 9.6 min; the
+second scan of the same 10.4 GB takes **0.7 s**, because every unchanged
+file is skipped on offset+mtime without being opened.
+
+## 2026-08-01 (later)
+
+- **`markdown_dir`/`remember_files`: new `extra_tags`** (string or list),
+  appended to every item's tags. `type` is always `observed` for anything
+  an observe-source indexes, so a consumer going straight at the DB
+  (rather than through `recall()`) has no way to tell a rule file apart
+  from a rotating registry without it -- both are `observed` alike.
+  `extra_tags` adds a source-level axis for exactly that distinction,
+  without inventing a second `type`.
+- **12 new observe-sources**, all `markdown_dir`, all read-only:
+  - `.SYNC/_policies/library` and `/adoption` (`policy-library` 4,
+    `policy-adoption` 4), tagged `policy`.
+  - Root-level pipeline steering docs (`CLAUDE.md`, `README.md`,
+    `MASTER-REGISTRY.md`, `POLICY-REG.md`, `STATUS_UEBERSICHT*.md`) for
+    six pipeline roots (`pipeline-docs-topics` 1, `-ai` 1, `-research` 13,
+    `-roblox` 3, `-software` 4, `-umbruch` 2), tagged `pipeline-doc`. Root
+    level only, deliberately not recursive -- a pipeline root can hold
+    thousands of per-project files below it.
+  - Root-level `CHECKS-REG.md` on the four pipeline roots where a plain
+    (non-host-suffixed) copy actually exists (`register-log-ai`,
+    `-research`, `-roblox`, `-software`, 1 each), tagged `register-log`.
+    Deliberately excludes host-suffixed rotation copies
+    (`CHECKS-REG-<HOST>-<N>.md`) and the large rotating `CHECKS-LOG*.txt`
+    raw logs -- those are exactly the "thousands of files" scope this
+    layer has always avoided.
+  - `AUTOMATIONS-MEMORY.md` was searched for too, but not newly
+    registered: the two canonical copies are already indexed by the
+    pre-existing `gemini-rules` and `gemini-antigravity` sources.
+  - `everything` count: 14257 -> 14293 (+36), matching the sum of what
+    each new source reported indexed.
+- **Two disabled-by-default source-config templates for cross-host
+  federation** via a separate transit-sync mechanism that mirrors another
+  host's databases to read-only `~/.republica/<host>/<namespace>.sqlite` (Republica showcases)
+  snapshots: `usmc_replica_source_configs(host)` (facts/lessons/working/
+  sessions, the same four-way split as this machine's own `usmc-*`
+  sources) and `gardener_replica_source_config(host)` (the foreign
+  `everything` table). Both raise for the current machine's own hostname
+  -- a replica directory named after the current host is that host's
+  replica of *itself*, and indexing it would duplicate every row under a
+  second source_id. Neither is registered anywhere by default; arming one
+  is a two-line call once a real other-host snapshot exists (see
+  `sources.py`'s module note above `usmc_replica_source_configs`).
+- Tests: +10 (`extra_tags` on/off/single-string; the two template
+  builders' self-host guard and disabled-by-default shape; a disabled
+  replica, an enabled-but-absent replica, and an enabled replica against
+  a real foreign snapshot are all clean, exception-free paths). Suite:
+  54 -> 64.
+
 ## 2026-08-01
 
 - **README language parity:** Synchronized `README_de.md` with the canonical
@@ -52,6 +261,17 @@
   - 11 new tests (`tests/test_search_gui.py`): snippet API, index page,
     search/entry/status endpoints, type filter, 404 handling, read-only
     enforcement. Suite verified at 50/50 passing.
+
+## 2026-08-01 (multi-agent transcripts)
+
+- **Multi-Agent Transcript Format Support**:
+  - Added native format extractor presets for **Gemini Antigravity** (`gemini_antigravity`), **Codex** (`codex`), and **Kimi** (`kimi`) in `scan_agent_transcripts` (`sources.py`).
+  - Added support for indexing Gemini transcript logs (`~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl`), Codex session & history JSONLs (`~/.codex/history.jsonl`, `~/.codex/archived_sessions/*.jsonl`), and Kimi wire transcripts (`~/.kimi/sessions/*/*/wire.jsonl`).
+  - Extended metadata mapping (`session`, `uuid`, `timestamp`, `step_index`) across all supported agent formats while retaining 100% backward compatibility for `claude_code` and `generic`.
+  - Added 3 new unit tests in `test_observe_sources.py` (`test_gemini_antigravity_format_preset`, `test_codex_format_preset`, `test_kimi_format_preset`).
+  - Suite nach Integration in den aktuellen Stand: 64 -> 67 grün. (Die Arbeit
+    entstand parallel auf einem OneDrive-Checkout gegen einen 42er-Stand und
+    wurde am 2026-08-01 im Zuge der Plan-D-Migration hierher übernommen.)
 
 ## 2026-07-30
 

@@ -23,6 +23,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -49,10 +50,33 @@ BLOB_THRESHOLD_DIRECT = 1_000_000      # < 1MB: direkt in DB
 BLOB_THRESHOLD_WARN   = 50_000_000     # < 50MB: BLOB in DB mit Warnung
 # > 50MB: nur Index + Halde
 
-# Internal runtime directories that observe()/sync() must never index
-INTERNAL_SKIP_PREFIXES = (".absorber", ".output", ".gardener", "__pycache__")
+# Path segments that observe()/sync() must never index. Derived from the
+# never-index list in sources.py so there is exactly one list to maintain:
+# what a federated source adapter refuses to read, the home-folder walk
+# refuses too (credentials, .ssh, node_modules, .git, .gardener, ...).
+try:
+    from sources import EXCLUDED_PATH_SEGMENTS as _EXCLUDED_SEGMENTS
+    from sources import is_excluded as _is_excluded_path
+except ImportError:  # pragma: no cover - sources.py is a sibling module
+    _EXCLUDED_SEGMENTS = frozenset({
+        ".absorber", ".output", ".gardener", "__pycache__",
+        "credentials", ".ssh", "node_modules", ".git",
+    })
+    _is_excluded_path = None
+INTERNAL_SKIP_PREFIXES = tuple(sorted(_EXCLUDED_SEGMENTS))
 # Internal top-level files that observe()/sync() must never index or absorb
 INTERNAL_SKIP_FILES = ("config.json",)
+
+# A credential signature found inside a CLOUD-SYNCED document is a security
+# finding in its own right: the value has left the machine. The same
+# signature inside a local agent transcript (~/.codex, ~/.claude) is not --
+# it never left. So the alert fires on source path, not on the finding.
+CLOUD_ALERT_ROOT = Path(os.environ.get(
+    "GARDENER_CLOUD_ROOT", os.path.expanduser("~/OneDrive")))
+CLOUD_ALERT_FILE = Path(os.environ.get(
+    "GARDENER_CLOUD_ALERT_FILE",
+    os.path.expanduser(
+        "~/OneDrive/.SYNC/laptop/SECURITY-ALERT_TOKEN-IN-ONEDRIVE.md")))
 
 
 # ---------------------------------------------------------------------------
@@ -145,11 +169,13 @@ class Gardener:
     def _init_db(self, db_path: Path):
         """Initialisiert eine Datenbank mit dem Schema."""
         conn = sqlite3.connect(str(db_path))
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.executescript(SCHEMA_SYSTEM)
-        conn.commit()
-        conn.close()
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.executescript(SCHEMA_SYSTEM)
+            conn.commit()
+        finally:
+            conn.close()
 
     def _conn(self, target: str = "user") -> sqlite3.Connection:
         """Gibt eine Connection zurück. 'user' oder 'system'."""
@@ -163,6 +189,15 @@ class Gardener:
         other = self.system_db_path if target == "user" else self.user_db_path
         conn.execute(f"ATTACH DATABASE ? AS other", (str(other),))
         return conn
+
+    @contextmanager
+    def connection(self, target: str = "user"):
+        """Context Manager fuer DB-Connections mit garantierter Schliessung."""
+        conn = self._conn(target)
+        try:
+            yield conn
+        finally:
+            conn.close()
 
     def _now(self) -> str:
         return datetime.now().isoformat(timespec="seconds")
@@ -411,27 +446,29 @@ class Gardener:
         conn = self._conn(target)
         db = "main"  # Immer in die primäre DB schreiben
 
-        # Upsert
-        existing = conn.execute(
-            f"SELECT id FROM {db}.everything WHERE name = ?", (name,)
-        ).fetchone()
+        try:
+            # Upsert
+            existing = conn.execute(
+                f"SELECT id FROM {db}.everything WHERE name = ?", (name,)
+            ).fetchone()
 
-        if existing:
-            conn.execute(f"""
-                UPDATE {db}.everything
-                SET content = ?, type = ?, tags = ?, meta = ?,
-                    pinned = ?, updated = ?
-                WHERE name = ?
-            """, (content, type, tags, meta_json, int(pinned), now, name))
-        else:
-            conn.execute(f"""
-                INSERT INTO {db}.everything
-                    (name, content, type, tags, meta, pinned, created, updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (name, content, type, tags, meta_json, int(pinned), now, now))
+            if existing:
+                conn.execute(f"""
+                    UPDATE {db}.everything
+                    SET content = ?, type = ?, tags = ?, meta = ?,
+                        pinned = ?, updated = ?
+                    WHERE name = ?
+                """, (content, type, tags, meta_json, int(pinned), now, name))
+            else:
+                conn.execute(f"""
+                    INSERT INTO {db}.everything
+                        (name, content, type, tags, meta, pinned, created, updated)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (name, content, type, tags, meta_json, int(pinned), now, now))
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+        finally:
+            conn.close()
 
         return self.get(name)
 
@@ -738,26 +775,28 @@ class Gardener:
         Status-Werte: open, doing, done, blocked, waiting
         """
         conn = self._conn("user")
-        sql = "SELECT *, 'user' as source FROM main.everything WHERE type = 'task'"
-        params = []
+        try:
+            sql = "SELECT *, 'user' as source FROM main.everything WHERE type = 'task'"
+            params = []
 
-        if status:
-            sql += " AND json_extract(meta, '$.status') = ?"
-            params.append(status)
+            if status:
+                sql += " AND json_extract(meta, '$.status') = ?"
+                params.append(status)
 
-        # Semantic priority order (critical > high > normal > low),
-        # not alphabetical string order
-        sql += """
-            ORDER BY CASE json_extract(meta, '$.priority')
-                WHEN 'critical' THEN 4
-                WHEN 'high' THEN 3
-                WHEN 'normal' THEN 2
-                WHEN 'low' THEN 1
-                ELSE 2
-            END DESC, updated DESC
-        """
-        rows = conn.execute(sql, params).fetchall()
-        conn.close()
+            # Semantic priority order (critical > high > normal > low),
+            # not alphabetical string order
+            sql += """
+                ORDER BY CASE json_extract(meta, '$.priority')
+                    WHEN 'critical' THEN 4
+                    WHEN 'high' THEN 3
+                    WHEN 'normal' THEN 2
+                    WHEN 'low' THEN 1
+                    ELSE 2
+                END DESC, updated DESC
+            """
+            rows = conn.execute(sql, params).fetchall()
+        finally:
+            conn.close()
         return [self._row_to_dict(row) for row in rows]
 
     def task(self, name: str, content: str = "", priority: str = "normal",
@@ -858,37 +897,39 @@ class Gardener:
         conn = self._conn("user")
         results = []
 
-        for mem_type in ("memory", "lesson", "session"):
-            try:
-                sql = """
-                    SELECT *, 'user' as source
-                    FROM main.everything e
-                    JOIN main.everything_fts fts ON e.id = fts.rowid
-                    WHERE everything_fts MATCH ? AND e.type = ?
-                    ORDER BY rank LIMIT ?
-                """
-                rows = conn.execute(sql, (query, mem_type, limit)).fetchall()
-                for row in rows:
-                    d = self._row_to_dict(row)
-                    results.append(d)
-                    # Boost: Gewicht erhoehen bei Abruf
-                    self._boost(conn, row["id"])
-            except Exception:
-                sql = """
-                    SELECT *, 'user' as source
-                    FROM main.everything e
-                    WHERE (e.name LIKE ? OR e.content LIKE ?) AND e.type = ?
-                    LIMIT ?
-                """
-                like = f"%{query}%"
-                rows = conn.execute(sql, (like, like, mem_type, limit)).fetchall()
-                for row in rows:
-                    d = self._row_to_dict(row)
-                    results.append(d)
-                    self._boost(conn, row["id"])
+        try:
+            for mem_type in ("memory", "lesson", "session"):
+                try:
+                    sql = """
+                        SELECT *, 'user' as source
+                        FROM main.everything e
+                        JOIN main.everything_fts fts ON e.id = fts.rowid
+                        WHERE everything_fts MATCH ? AND e.type = ?
+                        ORDER BY rank LIMIT ?
+                    """
+                    rows = conn.execute(sql, (query, mem_type, limit)).fetchall()
+                    for row in rows:
+                        d = self._row_to_dict(row)
+                        results.append(d)
+                        # Boost: Gewicht erhoehen bei Abruf
+                        self._boost(conn, row["id"])
+                except Exception:
+                    sql = """
+                        SELECT *, 'user' as source
+                        FROM main.everything e
+                        WHERE (e.name LIKE ? OR e.content LIKE ?) AND e.type = ?
+                        LIMIT ?
+                    """
+                    like = f"%{query}%"
+                    rows = conn.execute(sql, (like, like, mem_type, limit)).fetchall()
+                    for row in rows:
+                        d = self._row_to_dict(row)
+                        results.append(d)
+                        self._boost(conn, row["id"])
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+        finally:
+            conn.close()
 
         # Nach Gewicht sortieren
         results.sort(key=lambda x: x.get("meta", {}).get("weight", 0.5), reverse=True)
@@ -908,47 +949,49 @@ class Gardener:
         now = self._now()
         stats = {"decayed": 0, "forgotten": 0, "kept": 0}
 
-        # Alle Memory-artigen Einträge mit Gewicht.
-        # Gepinnte Einträge sind von Decay und Forget ausgenommen.
-        rows = conn.execute("""
-            SELECT id, name, type, meta FROM main.everything
-            WHERE type IN ('memory', 'lesson', 'session')
-              AND pinned = 0
-        """).fetchall()
+        try:
+            # Alle Memory-artigen Einträge mit Gewicht.
+            # Gepinnte Einträge sind von Decay und Forget ausgenommen.
+            rows = conn.execute("""
+                SELECT id, name, type, meta FROM main.everything
+                WHERE type IN ('memory', 'lesson', 'session')
+                  AND pinned = 0
+            """).fetchall()
 
-        for row in rows:
-            meta = row["meta"]
-            if isinstance(meta, str):
-                try:
-                    meta = json.loads(meta)
-                except (json.JSONDecodeError, TypeError):
-                    meta = {}
+            for row in rows:
+                meta = row["meta"]
+                if isinstance(meta, str):
+                    try:
+                        meta = json.loads(meta)
+                    except (json.JSONDecodeError, TypeError):
+                        meta = {}
 
-            weight = meta.get("weight", 0.5)
-            decay_rate = meta.get("decay_rate", 0.95)
+                weight = meta.get("weight", 0.5)
+                decay_rate = meta.get("decay_rate", 0.95)
 
-            # Decay anwenden
-            new_weight = weight * decay_rate
-            meta["weight"] = round(new_weight, 4)
-            meta["last_decay"] = now
+                # Decay anwenden
+                new_weight = weight * decay_rate
+                meta["weight"] = round(new_weight, 4)
+                meta["last_decay"] = now
 
-            if new_weight < 0.05:
-                # Vergessen: Eintrag löschen (unter Schwelle)
-                conn.execute("DELETE FROM main.everything WHERE id = ?", (row["id"],))
-                stats["forgotten"] += 1
-            else:
-                # Gewicht aktualisieren
-                conn.execute(
-                    "UPDATE main.everything SET meta = ? WHERE id = ?",
-                    (json.dumps(meta, ensure_ascii=False), row["id"])
-                )
-                if new_weight < weight:
-                    stats["decayed"] += 1
+                if new_weight < 0.05:
+                    # Vergessen: Eintrag löschen (unter Schwelle)
+                    conn.execute("DELETE FROM main.everything WHERE id = ?", (row["id"],))
+                    stats["forgotten"] += 1
                 else:
-                    stats["kept"] += 1
+                    # Gewicht aktualisieren
+                    conn.execute(
+                        "UPDATE main.everything SET meta = ? WHERE id = ?",
+                        (json.dumps(meta, ensure_ascii=False), row["id"])
+                    )
+                    if new_weight < weight:
+                        stats["decayed"] += 1
+                    else:
+                        stats["kept"] += 1
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+        finally:
+            conn.close()
         return stats
 
     def _boost(self, conn: sqlite3.Connection, entry_id: int, amount: float = 0.1):
@@ -989,15 +1032,16 @@ class Gardener:
         """
         for target in ("user", "system"):
             conn = self._conn(target)
-            row = conn.execute(
-                "SELECT id FROM main.everything WHERE name = ?", (name,)
-            ).fetchone()
-            if row:
-                conn.execute("DELETE FROM main.everything WHERE id = ?", (row["id"],))
-                conn.commit()
+            try:
+                row = conn.execute(
+                    "SELECT id FROM main.everything WHERE name = ?", (name,)
+                ).fetchone()
+                if row:
+                    conn.execute("DELETE FROM main.everything WHERE id = ?", (row["id"],))
+                    conn.commit()
+                    return True
+            finally:
                 conn.close()
-                return True
-            conn.close()
         return False
 
     def list(self, type: Optional[str] = None, limit: int = 50) -> List[Dict]:
@@ -1008,22 +1052,24 @@ class Gardener:
         conn = self._conn("user")
         results = []
 
-        for db_prefix, db_label in [("main", "user"), ("other", "system")]:
-            sql = f"SELECT *, '{db_label}' as source FROM {db_prefix}.everything"
-            params = []
+        try:
+            for db_prefix, db_label in [("main", "user"), ("other", "system")]:
+                sql = f"SELECT *, '{db_label}' as source FROM {db_prefix}.everything"
+                params = []
 
-            if type:
-                sql += " WHERE type = ?"
-                params.append(type)
+                if type:
+                    sql += " WHERE type = ?"
+                    params.append(type)
 
-            sql += " ORDER BY updated DESC LIMIT ?"
-            params.append(limit)
+                sql += " ORDER BY updated DESC LIMIT ?"
+                params.append(limit)
 
-            rows = conn.execute(sql, params).fetchall()
-            for row in rows:
-                results.append(self._row_to_dict(row))
+                rows = conn.execute(sql, params).fetchall()
+                for row in rows:
+                    results.append(self._row_to_dict(row))
+        finally:
+            conn.close()
 
-        conn.close()
         return results[:limit]
 
     def status(self) -> Dict:
@@ -1037,19 +1083,20 @@ class Gardener:
 
         # Counts
         conn = self._conn("user")
-        for db_prefix, db_label in [("main", "user"), ("other", "system")]:
-            count = conn.execute(
-                f"SELECT COUNT(*) FROM {db_prefix}.everything"
-            ).fetchone()[0]
-            info[f"{db_label}_entries"] = count
+        try:
+            for db_prefix, db_label in [("main", "user"), ("other", "system")]:
+                count = conn.execute(
+                    f"SELECT COUNT(*) FROM {db_prefix}.everything"
+                ).fetchone()[0]
+                info[f"{db_label}_entries"] = count
 
-            # Nach Typ
-            rows = conn.execute(
-                f"SELECT type, COUNT(*) as cnt FROM {db_prefix}.everything GROUP BY type"
-            ).fetchall()
-            info[f"{db_label}_types"] = {row["type"]: row["cnt"] for row in rows}
-
-        conn.close()
+                # Nach Typ
+                rows = conn.execute(
+                    f"SELECT type, COUNT(*) as cnt FROM {db_prefix}.everything GROUP BY type"
+                ).fetchall()
+                info[f"{db_label}_types"] = {row["type"]: row["cnt"] for row in rows}
+        finally:
+            conn.close()
 
         # Blob-Halde
         blob_count = len(list(self.blob_dir.glob("*")))
@@ -1105,6 +1152,68 @@ class Gardener:
     # "observe_sources" (source_id -> {kind, ...}); Scan-Fortschritt
     # (fuer inkrementelles Tailing grosser JSONL-Transkripte) liegt in
     # einer separaten Laufzeitdatei in data_dir, nicht in der DB.
+
+    # ------------------------------------------------------------------
+    # Cloud credential alert
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_cloud_path(path) -> bool:
+        """True if `path` lies inside the cloud-synced root."""
+        if not path:
+            return False
+        try:
+            Path(path).resolve().relative_to(CLOUD_ALERT_ROOT.resolve())
+            return True
+        except (ValueError, OSError):
+            return False
+
+    @staticmethod
+    def record_cloud_alerts(findings) -> int:
+        """Appends new (path, family) findings to the alert file.
+
+        `findings` is an iterable of (source_path, families). Only the path
+        and the family name are ever written -- never the value and never
+        the surrounding text, because the alert file itself lives in the
+        cloud folder it is warning about.
+
+        Idempotent: a finding already listed is not appended again, so a
+        nightly refresh does not grow the file without new information.
+        Returns the number of newly written lines.
+        """
+        pairs = sorted({(str(p), f) for p, fams in findings for f in fams})
+        if not pairs:
+            return 0
+
+        path = CLOUD_ALERT_FILE
+        try:
+            existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        except OSError:
+            existing = ""
+
+        new = [(p, f) for p, f in pairs if f"`{p}` | {f}" not in existing]
+        if not new:
+            return 0
+
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "a", encoding="utf-8") as fh:
+                if not existing:
+                    fh.write(
+                        "# SICHERHEITSBEFUND: Token-Signatur in "
+                        "Cloud-Dokument\n\n"
+                        "Zugangsdaten gehoeren nicht in einen Cloud-Ordner. "
+                        "Jede Zeile ist ein Fund beim Indizieren.\n"
+                        "Es wird **nur der Fundort und die Muster-Familie** "
+                        "notiert -- nie der Wert, nie der umgebende Text.\n\n"
+                        "| Datum | Quellpfad | Muster-Familie |\n"
+                        "|---|---|---|\n")
+                stamp = datetime.now().isoformat(timespec="seconds")
+                for p, f in new:
+                    fh.write(f"| {stamp} | `{p}` | {f} |\n")
+        except OSError:
+            return 0
+        return len(new)
 
     def _observe_source_state_path(self) -> Path:
         return self.data_dir / "observe_sources_state.json"
@@ -1201,13 +1310,36 @@ class Gardener:
             file_state = all_state.setdefault(sid, {})
             indexed = 0
             skipped = 0
+            # One connection for the whole source instead of three per item
+            # (get + put's own + put's return-get). Each of those opened a
+            # connection, ATTACHed the sibling DB and committed, which caps
+            # throughput at ~20 items/s -- and a full agent-transcript
+            # archive is six figures of items. Same upsert as put(), same
+            # FTS (maintained by AFTER INSERT/UPDATE triggers), just batched.
+            #
+            # Looking the existing entry up in main (user.db) alone -- rather
+            # than main-then-other, as get() does -- is safe here: an observed
+            # entry is always written with target='user', so it can only ever
+            # live in user.db.
+            conn = self._conn("user")
+            cloud_findings = []
             try:
                 for item in sources.scan(sid, cfg, state=file_state):
-                    existing = self.get(item.name)
-                    if (existing and existing.get("meta", {}).get(
-                            "source_fingerprint") == item.fingerprint):
-                        skipped += 1
-                        continue
+                    if item.redacted:
+                        src = (item.meta.get("source_ref") or {}).get("path")
+                        if self._is_cloud_path(src):
+                            cloud_findings.append((src, item.redacted))
+                    row = conn.execute(
+                        "SELECT id, meta FROM main.everything WHERE name = ?",
+                        (item.name,)).fetchone()
+                    if row is not None:
+                        try:
+                            prev_meta = json.loads(row["meta"] or "{}")
+                        except (json.JSONDecodeError, TypeError):
+                            prev_meta = {}
+                        if prev_meta.get("source_fingerprint") == item.fingerprint:
+                            skipped += 1
+                            continue
 
                     meta = dict(item.meta)
                     meta.update({
@@ -1216,18 +1348,61 @@ class Gardener:
                         "source_fingerprint": item.fingerprint,
                         "observed": True,
                     })
-                    self.put(item.name, content=item.content, type="observed",
-                             tags=item.tags, meta=meta, target="user")
+                    meta_json = json.dumps(meta, ensure_ascii=False)
+                    now = self._now()
+                    if row is not None:
+                        conn.execute("""
+                            UPDATE main.everything
+                            SET content = ?, type = ?, tags = ?, meta = ?,
+                                pinned = ?, updated = ?
+                            WHERE name = ?
+                        """, (item.content, "observed", item.tags, meta_json,
+                              0, now, item.name))
+                    else:
+                        conn.execute("""
+                            INSERT INTO main.everything
+                                (name, content, type, tags, meta, pinned,
+                                 created, updated)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (item.name, item.content, "observed", item.tags,
+                              meta_json, 0, now, now))
                     indexed += 1
+                    # Bounded transactions: a crash mid-scan keeps what was
+                    # already committed, and the offset state is only saved
+                    # after the source finishes, so the rest is simply
+                    # re-read next time.
+                    if indexed % 2000 == 0:
+                        conn.commit()
+                conn.commit()
                 stats[sid] = {"kind": kind, "indexed": indexed, "skipped": skipped}
+                if cloud_findings:
+                    written = self.record_cloud_alerts(cloud_findings)
+                    stats[sid]["cloud_alerts"] = len(cloud_findings)
+                    stats[sid]["cloud_alerts_new"] = written
+                    # Console warning: this is a security finding, not a
+                    # statistic. stderr so it stays visible even when a
+                    # sync run's stdout is piped into a log.
+                    print(f"WARNUNG [{sid}]: Token-Signatur in "
+                          f"{len(cloud_findings)} Cloud-Dokument(en) gefunden "
+                          f"-- {written} neu in {CLOUD_ALERT_FILE}",
+                          file=sys.stderr)
             except Exception as e:
                 # Eine kaputte Quellen-Konfiguration darf den Refresh der
                 # anderen Quellen nicht abreissen (gleiches Prinzip wie
                 # sync()'s Fehlerbehandlung pro Datei).
+                try:
+                    # Keep what was already scanned; the per-file offset
+                    # state only advances for files that finished, so the
+                    # unread remainder is picked up on the next refresh.
+                    conn.commit()
+                except sqlite3.Error:
+                    pass
                 stats[sid] = {
                     "error": f"{e.__class__.__name__}: {e}",
                     "indexed": indexed, "skipped": skipped,
                 }
+            finally:
+                conn.close()
 
         self._save_observe_source_state(all_state)
         return stats
@@ -1246,9 +1421,12 @@ class Gardener:
         '.absorber-notes.txt' are NOT skipped.
         """
         parts = str(rel).replace("\\", "/").split("/")
-        if any(p in INTERNAL_SKIP_PREFIXES for p in parts):
+        if any(p.lower() in INTERNAL_SKIP_PREFIXES for p in parts):
             return True
-        return len(parts) == 1 and parts[0] in INTERNAL_SKIP_FILES
+        if len(parts) == 1 and parts[0] in INTERNAL_SKIP_FILES:
+            return True
+        # Credential-bearing filenames (.npmrc, *.pem, auth.json, ...)
+        return bool(_is_excluded_path and _is_excluded_path(rel))
 
     @staticmethod
     def _safe_filename(raw, fallback: str) -> str:

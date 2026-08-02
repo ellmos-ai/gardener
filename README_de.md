@@ -7,7 +7,7 @@
 [![Gardener tests](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml/badge.svg)](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests: 54 passed](https://img.shields.io/badge/tests-54%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
+[![Tests: 85 passed](https://img.shields.io/badge/tests-85%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
 [![LLM OS](https://img.shields.io/badge/LLM--OS-SQLite%20Substrate-blueviolet.svg)](https://github.com/ellmos-ai/gardener)
 
 > [!NOTE]
@@ -197,10 +197,10 @@ Vier Quellenarten:
 
 | Art | Was indexiert wird | Wichtige Config |
 |---|---|---|
-| `markdown_dir` | Ein Verzeichnis mit Markdown-Dateien, ein Eintrag pro Datei. `path` darf selbst ein Glob sein, das mehrere Verzeichnisse abdeckt (z. B. eine Pro-Projekt-Memory-Konvention). `patterns` erweitert dies auf andere Dateiarten (z. B. `.txt`-Notizen). | `path`, `patterns` (Liste, Default `["*.md"]`), `glob` (einzelnes Muster, veralteter Alias) |
+| `markdown_dir` | Ein Verzeichnis mit Markdown-Dateien, ein Eintrag pro Datei. `path` darf selbst ein Glob sein, das mehrere Verzeichnisse abdeckt (z. B. eine Pro-Projekt-Memory-Konvention). `patterns` erweitert dies auf andere Dateiarten (z. B. `.txt`-Notizen). `extra_tags` haengt jedem Eintrag statische Tags an, damit ein nachgelagerter Konsument Quellen jenseits des festen `type='observed'` unterscheiden kann (z. B. eine Regeldatei, die als Hinweis eingeblendet werden soll, gegenueber einer rotierenden Registry, die durchsuchbar bleiben, aber nicht eingeblendet werden soll). | `path`, `patterns` (Liste, Default `["*.md"]`), `glob` (einzelnes Muster, veralteter Alias), `extra_tags` (String oder Liste) |
 | `remember_files` | Kleine Notiz-Dateien irgendwo unterhalb einer Wurzel, gefunden über rekursives Glob. | `path`, `glob` (Default `**/.remember`) |
 | `sqlite_table` | Eine einzelne Tabelle in einer fremden SQLite-Datenbank, streng lesend geöffnet (`mode=ro`). Spaltennamen werden vor Nutzung gegen das echte Schema geprüft (Whitelist). `content` darf mehrere Spalten benennen, die der Reihe nach zusammengefügt werden — eine Zeile, deren Sinn auf zwei Textfelder verteilt ist (das Problem *und* die Lösung einer Lesson), bleibt so vollständig durchsuchbar. | `db_path`, `table`, `columns` (`content` Pflicht, String oder Liste; `id`/`name`/`tags` optional) |
-| `agent_transcripts` | JSONL-Chat-Transkripte, zeilenweise indexiert, **nur Text-Turns** (Tool-Aufrufe/-Ergebnisse und interne „Thinking"-Blöcke werden übersprungen). Bringt ein eingebautes Feld-Mapping für Claude Codes eigenes Transkriptformat mit; jedes andere zeilenbasierte JSON-Transkript lässt sich über ein generisches Dotted-Path-Role/Text-Mapping indexieren. `default_role` deckt Archive mit nur einer Rolle ab, die gar kein Rollenfeld führen — etwa eine reine Prompt-Historie. Große, wachsende Dateien werden ab einem gespeicherten Byte-Offset weitergelesen — ein Refresh liest nie erneut, was schon indexiert wurde. | `path` (Glob, `**` rekursiv), `format` (`claude_code` Default, oder `generic` mit `role_field`/`text_field`/`default_role`) |
+| `agent_transcripts` | JSONL-Chat-Transkripte, zeilenweise indexiert, **nur Text-Turns** (Tool-Aufrufe/-Ergebnisse und interne „Thinking"-Blöcke werden übersprungen). Bringt eingebaute Feld-Mappings für Claude Code, Gemini Antigravity, Codex und Kimi Transkriptformate mit; jedes andere zeilenbasierte JSON-Transkript lässt sich über ein generisches Dotted-Path-Role/Text-Mapping indexieren. `default_role` deckt Archive mit nur einer Rolle ab, die gar kein Rollenfeld führen — etwa eine reine Prompt-Historie. Große, wachsende Dateien werden ab einem gespeicherten Byte-Offset weitergelesen — ein Refresh liest nie erneut, was schon indexiert wurde. `path` darf eine **Liste** von Globs sein, und `key_by="name"` schlüsselt den Offset-Zustand am Dateinamen statt am vollen Pfad — zusammen deckt das Hosts ab, die Transkripte zwischen Ordnern *rotieren* (Codex verschiebt fertige Rollouts von `sessions/` nach `archived_sessions/`), was sonst jede verschobene Datei ein zweites Mal unter neuem Namen indexieren würde. | `path` (Glob oder Liste von Globs, `**` rekursiv), `format` (`claude_code` Default, `gemini_antigravity`, `codex`, `kimi`, oder `generic` mit `role_field`/`text_field`/`default_role`), `key_by` (`path` Default, oder `name`) |
 
 ```bash
 # Index this machine's Claude Code project memories
@@ -262,6 +262,97 @@ af.observe_source_add("usmc-lessons", "sqlite_table",
                        columns={"id": "id", "name": "title",
                                 "content": ["problem", "solution"],
                                 "tags": "category"})
+
+# Transkripte, die der Host zwischen zwei Ordnern rotiert: eine Quelle
+# ueber beide, am Dateinamen geschluesselt, damit eine verschobene Datei
+# ihre Identitaet behaelt
+af.observe_source_add("codex-sessions", "agent_transcripts",
+                       path=["~/.codex/sessions/**/*.jsonl",
+                             "~/.codex/archived_sessions/*.jsonl"],
+                       format="codex", key_by="name")
+
+# Transkripte, die nur im ZIP liegen: streamend gelesen, nie entpackt.
+# Inkrementell je Archiv -- ein Archiv ist abgeschlossen, also ueberspringt
+# unveraenderte (mtime, size) die ganze Datei, ohne sie zu oeffnen.
+af.observe_source_add("gemini-archive", "agent_transcripts",
+                       path="~/.gemini/antigravity/conversations_archive/*.zip",
+                       format="gemini_antigravity",
+                       zip_inner="*/.system_generated/logs/transcript.jsonl")
+```
+
+### Was eine Quelle niemals indexieren kann
+
+Eine Quellen-Konfiguration richtet den Adapter auf einen beliebigen Glob —
+der Schutz davor, Zugangsdaten zu indexieren, kann deshalb nicht in den
+Konfigurationen liegen, sondern liegt in den Adaptern. `sources.is_excluded()`
+wird pro Datei geprueft, und keine Konfiguration kann das abschalten:
+
+- **Pfadsegmente** (ganz und case-insensitiv verglichen): `CREDENTIALS`,
+  `.ssh`, `.gnupg`, `.gardener` (Gardeners eigenes Laufzeitverzeichnis),
+  `node_modules`, `.git`, `.venv`/`venv`, `__pycache__`, `.absorber`,
+  `.output`.
+- **Dateinamen:** `.npmrc`, `.netrc`, `.pgpass`, `.env`, `auth.json`,
+  `credentials.json`, `secrets.json`, `token.json`, `id_rsa`/`id_ed25519`, …
+- **Endungen:** `.pem`, `.key`, `.p12`, `.pfx`, `.keystore`, `.jks`, …
+
+Weil Segmente ganz und nicht als String-Praefix verglichen werden, ist eine
+Nachbardatei namens `credentials-howto.md` *nicht* ausgeschlossen — nur ein
+echtes `CREDENTIALS/`-Verzeichnis. `gardener.py` leitet seine
+`observe()`/`sync()`-Ausschlussliste aus denselben Konstanten ab: eine Liste
+zu pflegen, und der Home-Ordner-Lauf kann nicht von den Adaptern abdriften.
+
+### Geheimnisse werden beim Hereinkommen geschwaerzt
+
+Die Ausschlussliste haelt Zugangsdaten-*Dateien* draussen. Gegen einen Token,
+den jemand mitten in eine Agenten-Sitzung kopiert hat, hilft sie nicht — der
+Text ist Teil des Transkripts. Deshalb wird der Text selbst redigiert, und
+zwar in `scan()`, dem einen Tor, durch das die Items jedes Adapters gehen:
+
+```text
+//registry.npmjs.org/:_authToken=npm_***REDACTED***
+```
+
+**Die Semantik ist gewollt: Ein Agent, der den echten Token braucht, muss zur
+Quelldatei gehen. Der Index verraet, WO ein Geheimnis liegt, nie WAS es ist.**
+
+13 Familien folgen den dokumentierten Formaten von GitHub Secret Scanning,
+gitleaks und detect-secrets (Anthropic, OpenAI, GitHub-PATs, AWS-Key-IDs,
+Slack, Google, GitLab, npm, `Authorization: Bearer`, PEM-Bloecke). Jedes
+Muster verankert sich an fester Laenge, eingeschraenkter Zeichenklasse und —
+wo der Anbieter einen liefert — einem Literal-Marker (`T3BlbkFJ`). Diese
+Verankerung, nicht das Praefix, haelt Fliesstext draussen: `skalar`,
+`ghpx_…`, `AKIAA`, `npm_install` und ein blosses „Bearer" im Satz bleiben
+unangetastet. Entropie-Heuristiken und Schluesselwort-Detektoren sind bewusst
+NICHT dabei — beide sind high-recall/low-precision, und ein Schritt, der
+unbeaufsichtigt laeuft, darf nicht raten.
+
+Eine Signatur in einer **cloud-synchronisierten** Datei (unter
+`GARDENER_CLOUD_ROOT`, Default `~/OneDrive`) ist ein eigener Sicherheitsbefund,
+weil der Wert das Geraet verlassen hat. Je Fund eine Zeile — Datum, Pfad,
+Familie, **nie der Wert** — wird idempotent an `GARDENER_CLOUD_ALERT_FILE`
+angehaengt, in den Statistiken von `observe_sources()` gezaehlt und auf stderr
+gemeldet. Dieselbe Signatur in einem lokalen Transkript loest keinen Alarm
+aus: sie ist nie hinausgegangen.
+
+### Eine Quelle fuer nachgelagerte Filterung taggen
+
+`type` ist bei allem, was eine observe-source indexiert, immer `observed` —
+ein Konsument, der die DB direkt abfragt (statt ueber `recall()`, das sich
+ohnehin auf `memory`/`lesson`/`session` beschraenkt), kann darueber eine
+Regeldatei nicht von einer rotierenden Check-Registry unterscheiden.
+`extra_tags` fuegt genau dafuer eine zweite, quellenweite Achse hinzu:
+
+```python
+# Findbar und es wert, als Hinweis eingeblendet zu werden
+af.observe_source_add("team-policies", "markdown_dir",
+                       path="~/policies", extra_tags=["policy"])
+
+# Findbar, aber ein Konsument darf sich vertretbar dagegen entscheiden,
+# es einzublenden -- ein rotierendes Log ist als eingeblendeter Hinweis
+# selten nuetzlich, auch wenn es in find() weiter etwas wert ist
+af.observe_source_add("check-registry", "markdown_dir",
+                       path="~/registries", patterns=["CHECKS-REG.md"],
+                       extra_tags=["register-log"])
 ```
 
 Alles so Indexierte ist `observed` — fremdes Material, erreichbar über
