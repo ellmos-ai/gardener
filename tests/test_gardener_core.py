@@ -342,6 +342,16 @@ class TestCliI18n(unittest.TestCase):
 
 
 class TestRepositoryHygiene(unittest.TestCase):
+    def setUp(self):
+        result = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            self.skipTest("Not inside a git repository")
+
     def test_gitignore_protects_runtime_and_secret_artifacts(self):
         protected_paths = [
             "gardener.db-wal",
@@ -444,6 +454,12 @@ class TestGardenerHardening(GardenerTempCase):
         names = [o["name"] for o in observed]
         self.assertIn("observed/unterordner/datei.txt", names)
         self.assertFalse(any("\\" in n for n in names))
+
+    def test_sqlite_connection_context_manager_safety(self):
+        with self.af.connection("user") as conn:
+            self.assertIsNotNone(conn)
+            row = conn.execute("SELECT 1").fetchone()
+            self.assertEqual(row[0], 1)
 
 
 if __name__ == "__main__":

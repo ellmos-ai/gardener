@@ -23,6 +23,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -157,11 +158,13 @@ class Gardener:
     def _init_db(self, db_path: Path):
         """Initialisiert eine Datenbank mit dem Schema."""
         conn = sqlite3.connect(str(db_path))
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.executescript(SCHEMA_SYSTEM)
-        conn.commit()
-        conn.close()
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.executescript(SCHEMA_SYSTEM)
+            conn.commit()
+        finally:
+            conn.close()
 
     def _conn(self, target: str = "user") -> sqlite3.Connection:
         """Gibt eine Connection zurück. 'user' oder 'system'."""
@@ -175,6 +178,15 @@ class Gardener:
         other = self.system_db_path if target == "user" else self.user_db_path
         conn.execute(f"ATTACH DATABASE ? AS other", (str(other),))
         return conn
+
+    @contextmanager
+    def connection(self, target: str = "user"):
+        """Context Manager fuer DB-Connections mit garantierter Schliessung."""
+        conn = self._conn(target)
+        try:
+            yield conn
+        finally:
+            conn.close()
 
     def _now(self) -> str:
         return datetime.now().isoformat(timespec="seconds")
@@ -423,27 +435,29 @@ class Gardener:
         conn = self._conn(target)
         db = "main"  # Immer in die primäre DB schreiben
 
-        # Upsert
-        existing = conn.execute(
-            f"SELECT id FROM {db}.everything WHERE name = ?", (name,)
-        ).fetchone()
+        try:
+            # Upsert
+            existing = conn.execute(
+                f"SELECT id FROM {db}.everything WHERE name = ?", (name,)
+            ).fetchone()
 
-        if existing:
-            conn.execute(f"""
-                UPDATE {db}.everything
-                SET content = ?, type = ?, tags = ?, meta = ?,
-                    pinned = ?, updated = ?
-                WHERE name = ?
-            """, (content, type, tags, meta_json, int(pinned), now, name))
-        else:
-            conn.execute(f"""
-                INSERT INTO {db}.everything
-                    (name, content, type, tags, meta, pinned, created, updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (name, content, type, tags, meta_json, int(pinned), now, now))
+            if existing:
+                conn.execute(f"""
+                    UPDATE {db}.everything
+                    SET content = ?, type = ?, tags = ?, meta = ?,
+                        pinned = ?, updated = ?
+                    WHERE name = ?
+                """, (content, type, tags, meta_json, int(pinned), now, name))
+            else:
+                conn.execute(f"""
+                    INSERT INTO {db}.everything
+                        (name, content, type, tags, meta, pinned, created, updated)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (name, content, type, tags, meta_json, int(pinned), now, now))
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+        finally:
+            conn.close()
 
         return self.get(name)
 
@@ -750,26 +764,28 @@ class Gardener:
         Status-Werte: open, doing, done, blocked, waiting
         """
         conn = self._conn("user")
-        sql = "SELECT *, 'user' as source FROM main.everything WHERE type = 'task'"
-        params = []
+        try:
+            sql = "SELECT *, 'user' as source FROM main.everything WHERE type = 'task'"
+            params = []
 
-        if status:
-            sql += " AND json_extract(meta, '$.status') = ?"
-            params.append(status)
+            if status:
+                sql += " AND json_extract(meta, '$.status') = ?"
+                params.append(status)
 
-        # Semantic priority order (critical > high > normal > low),
-        # not alphabetical string order
-        sql += """
-            ORDER BY CASE json_extract(meta, '$.priority')
-                WHEN 'critical' THEN 4
-                WHEN 'high' THEN 3
-                WHEN 'normal' THEN 2
-                WHEN 'low' THEN 1
-                ELSE 2
-            END DESC, updated DESC
-        """
-        rows = conn.execute(sql, params).fetchall()
-        conn.close()
+            # Semantic priority order (critical > high > normal > low),
+            # not alphabetical string order
+            sql += """
+                ORDER BY CASE json_extract(meta, '$.priority')
+                    WHEN 'critical' THEN 4
+                    WHEN 'high' THEN 3
+                    WHEN 'normal' THEN 2
+                    WHEN 'low' THEN 1
+                    ELSE 2
+                END DESC, updated DESC
+            """
+            rows = conn.execute(sql, params).fetchall()
+        finally:
+            conn.close()
         return [self._row_to_dict(row) for row in rows]
 
     def task(self, name: str, content: str = "", priority: str = "normal",
@@ -870,37 +886,39 @@ class Gardener:
         conn = self._conn("user")
         results = []
 
-        for mem_type in ("memory", "lesson", "session"):
-            try:
-                sql = """
-                    SELECT *, 'user' as source
-                    FROM main.everything e
-                    JOIN main.everything_fts fts ON e.id = fts.rowid
-                    WHERE everything_fts MATCH ? AND e.type = ?
-                    ORDER BY rank LIMIT ?
-                """
-                rows = conn.execute(sql, (query, mem_type, limit)).fetchall()
-                for row in rows:
-                    d = self._row_to_dict(row)
-                    results.append(d)
-                    # Boost: Gewicht erhoehen bei Abruf
-                    self._boost(conn, row["id"])
-            except Exception:
-                sql = """
-                    SELECT *, 'user' as source
-                    FROM main.everything e
-                    WHERE (e.name LIKE ? OR e.content LIKE ?) AND e.type = ?
-                    LIMIT ?
-                """
-                like = f"%{query}%"
-                rows = conn.execute(sql, (like, like, mem_type, limit)).fetchall()
-                for row in rows:
-                    d = self._row_to_dict(row)
-                    results.append(d)
-                    self._boost(conn, row["id"])
+        try:
+            for mem_type in ("memory", "lesson", "session"):
+                try:
+                    sql = """
+                        SELECT *, 'user' as source
+                        FROM main.everything e
+                        JOIN main.everything_fts fts ON e.id = fts.rowid
+                        WHERE everything_fts MATCH ? AND e.type = ?
+                        ORDER BY rank LIMIT ?
+                    """
+                    rows = conn.execute(sql, (query, mem_type, limit)).fetchall()
+                    for row in rows:
+                        d = self._row_to_dict(row)
+                        results.append(d)
+                        # Boost: Gewicht erhoehen bei Abruf
+                        self._boost(conn, row["id"])
+                except Exception:
+                    sql = """
+                        SELECT *, 'user' as source
+                        FROM main.everything e
+                        WHERE (e.name LIKE ? OR e.content LIKE ?) AND e.type = ?
+                        LIMIT ?
+                    """
+                    like = f"%{query}%"
+                    rows = conn.execute(sql, (like, like, mem_type, limit)).fetchall()
+                    for row in rows:
+                        d = self._row_to_dict(row)
+                        results.append(d)
+                        self._boost(conn, row["id"])
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+        finally:
+            conn.close()
 
         # Nach Gewicht sortieren
         results.sort(key=lambda x: x.get("meta", {}).get("weight", 0.5), reverse=True)
@@ -920,47 +938,49 @@ class Gardener:
         now = self._now()
         stats = {"decayed": 0, "forgotten": 0, "kept": 0}
 
-        # Alle Memory-artigen Einträge mit Gewicht.
-        # Gepinnte Einträge sind von Decay und Forget ausgenommen.
-        rows = conn.execute("""
-            SELECT id, name, type, meta FROM main.everything
-            WHERE type IN ('memory', 'lesson', 'session')
-              AND pinned = 0
-        """).fetchall()
+        try:
+            # Alle Memory-artigen Einträge mit Gewicht.
+            # Gepinnte Einträge sind von Decay und Forget ausgenommen.
+            rows = conn.execute("""
+                SELECT id, name, type, meta FROM main.everything
+                WHERE type IN ('memory', 'lesson', 'session')
+                  AND pinned = 0
+            """).fetchall()
 
-        for row in rows:
-            meta = row["meta"]
-            if isinstance(meta, str):
-                try:
-                    meta = json.loads(meta)
-                except (json.JSONDecodeError, TypeError):
-                    meta = {}
+            for row in rows:
+                meta = row["meta"]
+                if isinstance(meta, str):
+                    try:
+                        meta = json.loads(meta)
+                    except (json.JSONDecodeError, TypeError):
+                        meta = {}
 
-            weight = meta.get("weight", 0.5)
-            decay_rate = meta.get("decay_rate", 0.95)
+                weight = meta.get("weight", 0.5)
+                decay_rate = meta.get("decay_rate", 0.95)
 
-            # Decay anwenden
-            new_weight = weight * decay_rate
-            meta["weight"] = round(new_weight, 4)
-            meta["last_decay"] = now
+                # Decay anwenden
+                new_weight = weight * decay_rate
+                meta["weight"] = round(new_weight, 4)
+                meta["last_decay"] = now
 
-            if new_weight < 0.05:
-                # Vergessen: Eintrag löschen (unter Schwelle)
-                conn.execute("DELETE FROM main.everything WHERE id = ?", (row["id"],))
-                stats["forgotten"] += 1
-            else:
-                # Gewicht aktualisieren
-                conn.execute(
-                    "UPDATE main.everything SET meta = ? WHERE id = ?",
-                    (json.dumps(meta, ensure_ascii=False), row["id"])
-                )
-                if new_weight < weight:
-                    stats["decayed"] += 1
+                if new_weight < 0.05:
+                    # Vergessen: Eintrag löschen (unter Schwelle)
+                    conn.execute("DELETE FROM main.everything WHERE id = ?", (row["id"],))
+                    stats["forgotten"] += 1
                 else:
-                    stats["kept"] += 1
+                    # Gewicht aktualisieren
+                    conn.execute(
+                        "UPDATE main.everything SET meta = ? WHERE id = ?",
+                        (json.dumps(meta, ensure_ascii=False), row["id"])
+                    )
+                    if new_weight < weight:
+                        stats["decayed"] += 1
+                    else:
+                        stats["kept"] += 1
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+        finally:
+            conn.close()
         return stats
 
     def _boost(self, conn: sqlite3.Connection, entry_id: int, amount: float = 0.1):
@@ -1001,15 +1021,16 @@ class Gardener:
         """
         for target in ("user", "system"):
             conn = self._conn(target)
-            row = conn.execute(
-                "SELECT id FROM main.everything WHERE name = ?", (name,)
-            ).fetchone()
-            if row:
-                conn.execute("DELETE FROM main.everything WHERE id = ?", (row["id"],))
-                conn.commit()
+            try:
+                row = conn.execute(
+                    "SELECT id FROM main.everything WHERE name = ?", (name,)
+                ).fetchone()
+                if row:
+                    conn.execute("DELETE FROM main.everything WHERE id = ?", (row["id"],))
+                    conn.commit()
+                    return True
+            finally:
                 conn.close()
-                return True
-            conn.close()
         return False
 
     def list(self, type: Optional[str] = None, limit: int = 50) -> List[Dict]:
@@ -1020,22 +1041,24 @@ class Gardener:
         conn = self._conn("user")
         results = []
 
-        for db_prefix, db_label in [("main", "user"), ("other", "system")]:
-            sql = f"SELECT *, '{db_label}' as source FROM {db_prefix}.everything"
-            params = []
+        try:
+            for db_prefix, db_label in [("main", "user"), ("other", "system")]:
+                sql = f"SELECT *, '{db_label}' as source FROM {db_prefix}.everything"
+                params = []
 
-            if type:
-                sql += " WHERE type = ?"
-                params.append(type)
+                if type:
+                    sql += " WHERE type = ?"
+                    params.append(type)
 
-            sql += " ORDER BY updated DESC LIMIT ?"
-            params.append(limit)
+                sql += " ORDER BY updated DESC LIMIT ?"
+                params.append(limit)
 
-            rows = conn.execute(sql, params).fetchall()
-            for row in rows:
-                results.append(self._row_to_dict(row))
+                rows = conn.execute(sql, params).fetchall()
+                for row in rows:
+                    results.append(self._row_to_dict(row))
+        finally:
+            conn.close()
 
-        conn.close()
         return results[:limit]
 
     def status(self) -> Dict:
@@ -1049,19 +1072,20 @@ class Gardener:
 
         # Counts
         conn = self._conn("user")
-        for db_prefix, db_label in [("main", "user"), ("other", "system")]:
-            count = conn.execute(
-                f"SELECT COUNT(*) FROM {db_prefix}.everything"
-            ).fetchone()[0]
-            info[f"{db_label}_entries"] = count
+        try:
+            for db_prefix, db_label in [("main", "user"), ("other", "system")]:
+                count = conn.execute(
+                    f"SELECT COUNT(*) FROM {db_prefix}.everything"
+                ).fetchone()[0]
+                info[f"{db_label}_entries"] = count
 
-            # Nach Typ
-            rows = conn.execute(
-                f"SELECT type, COUNT(*) as cnt FROM {db_prefix}.everything GROUP BY type"
-            ).fetchall()
-            info[f"{db_label}_types"] = {row["type"]: row["cnt"] for row in rows}
-
-        conn.close()
+                # Nach Typ
+                rows = conn.execute(
+                    f"SELECT type, COUNT(*) as cnt FROM {db_prefix}.everything GROUP BY type"
+                ).fetchall()
+                info[f"{db_label}_types"] = {row["type"]: row["cnt"] for row in rows}
+        finally:
+            conn.close()
 
         # Blob-Halde
         blob_count = len(list(self.blob_dir.glob("*")))
