@@ -49,8 +49,20 @@ BLOB_THRESHOLD_DIRECT = 1_000_000      # < 1MB: direkt in DB
 BLOB_THRESHOLD_WARN   = 50_000_000     # < 50MB: BLOB in DB mit Warnung
 # > 50MB: nur Index + Halde
 
-# Internal runtime directories that observe()/sync() must never index
-INTERNAL_SKIP_PREFIXES = (".absorber", ".output", ".gardener", "__pycache__")
+# Path segments that observe()/sync() must never index. Derived from the
+# never-index list in sources.py so there is exactly one list to maintain:
+# what a federated source adapter refuses to read, the home-folder walk
+# refuses too (credentials, .ssh, node_modules, .git, .gardener, ...).
+try:
+    from sources import EXCLUDED_PATH_SEGMENTS as _EXCLUDED_SEGMENTS
+    from sources import is_excluded as _is_excluded_path
+except ImportError:  # pragma: no cover - sources.py is a sibling module
+    _EXCLUDED_SEGMENTS = frozenset({
+        ".absorber", ".output", ".gardener", "__pycache__",
+        "credentials", ".ssh", "node_modules", ".git",
+    })
+    _is_excluded_path = None
+INTERNAL_SKIP_PREFIXES = tuple(sorted(_EXCLUDED_SEGMENTS))
 # Internal top-level files that observe()/sync() must never index or absorb
 INTERNAL_SKIP_FILES = ("config.json",)
 
@@ -1201,13 +1213,31 @@ class Gardener:
             file_state = all_state.setdefault(sid, {})
             indexed = 0
             skipped = 0
+            # One connection for the whole source instead of three per item
+            # (get + put's own + put's return-get). Each of those opened a
+            # connection, ATTACHed the sibling DB and committed, which caps
+            # throughput at ~20 items/s -- and a full agent-transcript
+            # archive is six figures of items. Same upsert as put(), same
+            # FTS (maintained by AFTER INSERT/UPDATE triggers), just batched.
+            #
+            # Looking the existing entry up in main (user.db) alone -- rather
+            # than main-then-other, as get() does -- is safe here: an observed
+            # entry is always written with target='user', so it can only ever
+            # live in user.db.
+            conn = self._conn("user")
             try:
                 for item in sources.scan(sid, cfg, state=file_state):
-                    existing = self.get(item.name)
-                    if (existing and existing.get("meta", {}).get(
-                            "source_fingerprint") == item.fingerprint):
-                        skipped += 1
-                        continue
+                    row = conn.execute(
+                        "SELECT id, meta FROM main.everything WHERE name = ?",
+                        (item.name,)).fetchone()
+                    if row is not None:
+                        try:
+                            prev_meta = json.loads(row["meta"] or "{}")
+                        except (json.JSONDecodeError, TypeError):
+                            prev_meta = {}
+                        if prev_meta.get("source_fingerprint") == item.fingerprint:
+                            skipped += 1
+                            continue
 
                     meta = dict(item.meta)
                     meta.update({
@@ -1216,18 +1246,50 @@ class Gardener:
                         "source_fingerprint": item.fingerprint,
                         "observed": True,
                     })
-                    self.put(item.name, content=item.content, type="observed",
-                             tags=item.tags, meta=meta, target="user")
+                    meta_json = json.dumps(meta, ensure_ascii=False)
+                    now = self._now()
+                    if row is not None:
+                        conn.execute("""
+                            UPDATE main.everything
+                            SET content = ?, type = ?, tags = ?, meta = ?,
+                                pinned = ?, updated = ?
+                            WHERE name = ?
+                        """, (item.content, "observed", item.tags, meta_json,
+                              0, now, item.name))
+                    else:
+                        conn.execute("""
+                            INSERT INTO main.everything
+                                (name, content, type, tags, meta, pinned,
+                                 created, updated)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (item.name, item.content, "observed", item.tags,
+                              meta_json, 0, now, now))
                     indexed += 1
+                    # Bounded transactions: a crash mid-scan keeps what was
+                    # already committed, and the offset state is only saved
+                    # after the source finishes, so the rest is simply
+                    # re-read next time.
+                    if indexed % 2000 == 0:
+                        conn.commit()
+                conn.commit()
                 stats[sid] = {"kind": kind, "indexed": indexed, "skipped": skipped}
             except Exception as e:
                 # Eine kaputte Quellen-Konfiguration darf den Refresh der
                 # anderen Quellen nicht abreissen (gleiches Prinzip wie
                 # sync()'s Fehlerbehandlung pro Datei).
+                try:
+                    # Keep what was already scanned; the per-file offset
+                    # state only advances for files that finished, so the
+                    # unread remainder is picked up on the next refresh.
+                    conn.commit()
+                except sqlite3.Error:
+                    pass
                 stats[sid] = {
                     "error": f"{e.__class__.__name__}: {e}",
                     "indexed": indexed, "skipped": skipped,
                 }
+            finally:
+                conn.close()
 
         self._save_observe_source_state(all_state)
         return stats
@@ -1246,9 +1308,12 @@ class Gardener:
         '.absorber-notes.txt' are NOT skipped.
         """
         parts = str(rel).replace("\\", "/").split("/")
-        if any(p in INTERNAL_SKIP_PREFIXES for p in parts):
+        if any(p.lower() in INTERNAL_SKIP_PREFIXES for p in parts):
             return True
-        return len(parts) == 1 and parts[0] in INTERNAL_SKIP_FILES
+        if len(parts) == 1 and parts[0] in INTERNAL_SKIP_FILES:
+            return True
+        # Credential-bearing filenames (.npmrc, *.pem, auth.json, ...)
+        return bool(_is_excluded_path and _is_excluded_path(rel))
 
     @staticmethod
     def _safe_filename(raw, fallback: str) -> str:

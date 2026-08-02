@@ -508,38 +508,117 @@ class TestAgentTranscriptSource(ObserveSourceTestCase):
         roles = {h["meta"]["source_ref"]["role"] for h in hits}
         self.assertEqual(roles, {"user", "assistant"})
 
+    def test_gemini_antigravity_skips_tool_action_steps(self):
+        """source=MODEL alone is not an assistant turn.
+
+        VIEW_FILE/RUN_COMMAND/LIST_DIRECTORY steps carry file dumps and
+        command output, not prose -- indexing them was pulling tool
+        noise into the index under role 'assistant'.
+        """
+        jsonl_path = self.foreign / "transcript.jsonl"
+        self._write_jsonl(jsonl_path, [
+            {"step_index": 0, "source": "USER_EXPLICIT", "type": "USER_INPUT",
+             "content": "Bitte Kennzahl pruefen."},
+            {"step_index": 1, "source": "MODEL", "type": "PLANNER_RESPONSE",
+             "content": "Ich pruefe die Kennzahl jetzt."},
+            {"step_index": 2, "source": "MODEL", "type": "VIEW_FILE",
+             "content": "File Path: c:/tmp/kennzahl.txt Total Lines: 162"},
+            {"step_index": 3, "source": "MODEL", "type": "RUN_COMMAND",
+             "content": "Status: RUNNING | Kennzahl-Log"},
+        ])
+
+        self.af.observe_source_add(
+            "gemini-noise", "agent_transcripts", path=str(jsonl_path),
+            format="gemini_antigravity",
+        )
+        result = self.af.observe_sources("gemini-noise")
+        self.assertEqual(result["gemini-noise"]["indexed"], 2)
+        hits = self.af.find("Kennzahl")
+        self.assertEqual(len(hits), 2)
+
     def test_codex_format_preset(self):
+        """Codex: flat history plus the clean event_msg channel.
+
+        response_item/message is deliberately NOT indexed -- its
+        assistant turns duplicate agent_message and its user turns
+        carry injected AGENTS.md/skill boilerplate.
+        """
         history_path = self.foreign / "codex-history.jsonl"
         session_path = self.foreign / "rollout-session.jsonl"
-        
+
         self._write_jsonl(history_path, [
-            {"session_id": "codex-s1", "ts": 1780794418, "text": "Teste bitte den Code-Refactoring-Schritt."}
+            {"session_id": "codex-s1", "ts": 1780794418,
+             "text": "Teste bitte den Refactoring-Schritt."}
         ])
         self._write_jsonl(session_path, [
-            {"timestamp": "2026-04-15T22:11:28.282Z", "type": "response_item",
-             "payload": {"type": "message", "role": "assistant",
-                         "content": [{"type": "text", "text": "Refactoring-Schritt wurde erfolgreich ausgeführt."}]}}
+            {"type": "event_msg", "payload": {
+                "type": "user_message", "message": "Starte das Refactoring."}},
+            {"type": "event_msg", "payload": {
+                "type": "agent_message",
+                "message": "Refactoring wurde ausgefuehrt.", "phase": "commentary"}},
+            # Duplicate of the agent_message above -- must be skipped.
+            {"type": "response_item", "payload": {
+                "type": "message", "role": "assistant",
+                "content": [{"type": "output_text",
+                             "text": "Refactoring wurde ausgefuehrt."}]}},
+            # Injected system prompt material -- must be skipped.
+            {"type": "response_item", "payload": {
+                "type": "message", "role": "developer",
+                "content": [{"type": "input_text",
+                             "text": "# AGENTS.md Refactoring instructions"}]}},
+            {"type": "response_item", "payload": {"type": "reasoning"}},
+            {"type": "event_msg", "payload": {"type": "token_count"}},
+            # Sub-agent tool traffic wrapped in an agent_message -- a
+            # verbatim tool call and its output, not prose.
+            {"type": "event_msg", "payload": {
+                "type": "agent_message",
+                "message": "[external_agent_tool_call: Read]\n"
+                           "file: C:/tmp/Refactoring.py"}},
+            {"type": "event_msg", "payload": {
+                "type": "agent_message",
+                "message": "[external_agent_tool_result]\n"
+                           "Refactoring DeprecationWarning ..."}},
         ])
 
         self.af.observe_source_add(
-            "codex-transcripts", "agent_transcripts", path=str(self.foreign / "*codex*.jsonl"),
-            format="codex",
+            "codex-history", "agent_transcripts",
+            path=str(self.foreign / "*codex*.jsonl"), format="codex",
         )
         self.af.observe_source_add(
-            "codex-sessions", "agent_transcripts", path=str(self.foreign / "*rollout*.jsonl"),
-            format="codex",
+            "codex-sessions", "agent_transcripts",
+            path=str(self.foreign / "*rollout*.jsonl"), format="codex",
         )
-        res1 = self.af.observe_sources("codex-transcripts")
+        res1 = self.af.observe_sources("codex-history")
         res2 = self.af.observe_sources("codex-sessions")
-        self.assertEqual(res1["codex-transcripts"]["indexed"], 1)
-        self.assertEqual(res2["codex-sessions"]["indexed"], 1)
-        self.assertEqual(len(self.af.find("Refactoring")), 2)
+        self.assertEqual(res1["codex-history"]["indexed"], 1)
+        self.assertEqual(res2["codex-sessions"]["indexed"], 2)
+        # 1 history + 1 user_message + 1 agent_message, no duplicate.
+        self.assertEqual(len(self.af.find("Refactoring")), 3)
 
     def test_kimi_format_preset(self):
+        """Kimi wire.jsonl is an event stream, not a message list."""
         wire_path = self.foreign / "wire.jsonl"
         self._write_jsonl(wire_path, [
-            {"timestamp": 1781379142.4102, "message": {"type": "TurnBegin", "payload": {"user_input": "Starte Kimi Integrationstest."}}},
-            {"role": "assistant", "content": "Kimi Integrationstest läuft jetzt."},
+            {"type": "context.append_message", "message": {
+                "role": "user",
+                "content": [{"type": "text", "text": "Starte Integrationstest."}],
+                "origin": {"kind": "user"}}},
+            {"type": "context.append_loop_event", "event": {
+                "type": "content.part",
+                "part": {"type": "text", "text": "Integrationstest laeuft."}}},
+            # Internal reasoning -- must be skipped.
+            {"type": "context.append_loop_event", "event": {
+                "type": "content.part",
+                "part": {"type": "think", "think": "Integrationstest ueberlegen."}}},
+            # Tool traffic -- must be skipped.
+            {"type": "context.append_loop_event", "event": {
+                "type": "tool.result", "result": "Integrationstest output"}},
+            # Injected reminder wearing role 'user' -- must be skipped.
+            {"type": "context.append_message", "message": {
+                "role": "user",
+                "content": [{"type": "text", "text": "Integrationstest Reminder."}],
+                "origin": {"kind": "injection/todo_list_reminder"}}},
+            {"type": "usage.record", "usage": {"tokens": 5}},
         ])
 
         self.af.observe_source_add(
@@ -548,7 +627,47 @@ class TestAgentTranscriptSource(ObserveSourceTestCase):
         )
         result = self.af.observe_sources("kimi-transcripts")
         self.assertEqual(result["kimi-transcripts"]["indexed"], 2)
-        self.assertEqual(len(self.af.find("Integrationstest")), 2)
+        hits = self.af.find("Integrationstest")
+        self.assertEqual(len(hits), 2)
+        self.assertEqual(
+            {h["meta"]["source_ref"]["role"] for h in hits},
+            {"user", "assistant"})
+
+    def test_multi_path_source_with_name_key_survives_a_file_move(self):
+        """A rotated transcript must not be indexed a second time.
+
+        Codex moves finished rollouts from sessions/ to
+        archived_sessions/. With one source spanning both directories
+        and key_by='name', the moved file keeps its identity: same
+        entry name, offset preserved, nothing re-indexed.
+        """
+        live = self.foreign / "sessions"
+        archive = self.foreign / "archived_sessions"
+        live.mkdir(parents=True, exist_ok=True)
+        archive.mkdir(parents=True, exist_ok=True)
+        rollout = live / "rollout-2026-08-02-abc.jsonl"
+        self._write_jsonl(rollout, [
+            {"type": "event_msg", "payload": {
+                "type": "user_message", "message": "Wanderfall pruefen."}},
+        ])
+
+        self.af.observe_source_add(
+            "codex-all", "agent_transcripts",
+            path=[str(live / "*.jsonl"), str(archive / "*.jsonl")],
+            format="codex", key_by="name",
+        )
+        first = self.af.observe_sources("codex-all")
+        self.assertEqual(first["codex-all"]["indexed"], 1)
+        names_before = {h["name"] for h in self.af.find("Wanderfall")}
+
+        # Rotate the file into the archive directory.
+        rollout.rename(archive / rollout.name)
+
+        second = self.af.observe_sources("codex-all")
+        self.assertEqual(second["codex-all"]["indexed"], 0)
+        hits = self.af.find("Wanderfall")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual({h["name"] for h in hits}, names_before)
 
 
 class TestFederatedSearchAndCrud(ObserveSourceTestCase):
@@ -720,6 +839,97 @@ class TestReplicaSourceLifecycle(ObserveSourceTestCase):
         hits = self.af.find("Transit-Sync einmal laufen lassen")
         self.assertEqual(len(hits), 1)
         self.assertIn("Snapshot fehlte", hits[0]["content"])
+
+
+class TestNeverIndexList(ObserveSourceTestCase):
+    """A source config must not be able to pull secrets into the index.
+
+    The block list is enforced inside the adapters, so an over-broad or
+    mistyped glob cannot defeat it.
+    """
+
+    def test_is_excluded_matches_segments_filenames_and_suffixes(self):
+        import sources
+        for bad in (
+            r"C:\_Local_DEV\CREDENTIALS\hetzner\webhosting_s.md",
+            r"C:\_Local_DEV\credentials\x.txt",          # case-insensitive
+            "/home/u/.ssh/config",
+            "/home/u/.gardener/user.db",                 # never index itself
+            "/proj/node_modules/pkg/readme.md",
+            "/proj/.git/COMMIT_EDITMSG",
+            "/home/u/.npmrc",
+            "/home/u/project/.env",
+            "/home/u/.codex/auth.json",
+            "/home/u/certs/server.pem",
+            "/home/u/keys/deploy.key",
+        ):
+            with self.subTest(path=bad):
+                self.assertTrue(sources.is_excluded(bad), bad)
+
+        for good in (
+            "/home/u/notes/credentials-howto.md",        # sibling name
+            "/home/u/.claude/projects/p/memory/MEMORY.md",
+            "/home/u/docs/environment.md",
+            "/home/u/.gemini/GEMINI.md",
+        ):
+            with self.subTest(path=good):
+                self.assertFalse(sources.is_excluded(good), good)
+
+    def test_markdown_dir_skips_excluded_files_and_dirs(self):
+        root = self.foreign / "mixed"
+        (root / "node_modules" / "pkg").mkdir(parents=True, exist_ok=True)
+        root.mkdir(parents=True, exist_ok=True)
+        (root / "notiz.md").write_text("Merksatz oeffentlich", encoding="utf-8")
+        (root / "auth.json").write_text("Merksatz geheim", encoding="utf-8")
+        (root / ".npmrc").write_text("Merksatz geheim", encoding="utf-8")
+        (root / "node_modules" / "pkg" / "readme.md").write_text(
+            "Merksatz geheim", encoding="utf-8")
+
+        self.af.observe_source_add(
+            "mixed", "markdown_dir", path=str(root),
+            patterns=["**/*.md", "*.json", ".npmrc"])
+        result = self.af.observe_sources("mixed")
+
+        self.assertEqual(result["mixed"]["indexed"], 1)
+        hits = self.af.find("Merksatz")
+        self.assertEqual(len(hits), 1)
+        self.assertIn("oeffentlich", hits[0]["content"])
+
+    def test_agent_transcripts_skips_excluded_paths(self):
+        secret_dir = self.foreign / "CREDENTIALS"
+        secret_dir.mkdir(parents=True, exist_ok=True)
+        ok_dir = self.foreign / "ok"
+        ok_dir.mkdir(parents=True, exist_ok=True)
+
+        def write(path, text):
+            path.write_text(
+                json.dumps({"type": "event_msg",
+                            "payload": {"type": "user_message",
+                                        "message": text}}) + "\n",
+                encoding="utf-8")
+
+        write(secret_dir / "leak.jsonl", "Kennwort Notfallzugang")
+        write(ok_dir / "fine.jsonl", "Kennwort Thema besprochen")
+
+        self.af.observe_source_add(
+            "wide", "agent_transcripts",
+            path=str(self.foreign / "**" / "*.jsonl"), format="codex")
+        result = self.af.observe_sources("wide")
+
+        self.assertEqual(result["wide"]["indexed"], 1)
+        hits = self.af.find("Kennwort")
+        self.assertEqual(len(hits), 1)
+        self.assertIn("besprochen", hits[0]["content"])
+
+    def test_gardener_home_walk_uses_the_same_list(self):
+        """observe()/sync() derive their skip list from sources.py."""
+        import gardener as gardener_mod
+        for segment in ("credentials", ".ssh", "node_modules", ".git",
+                        ".gardener", "__pycache__"):
+            self.assertIn(segment, gardener_mod.INTERNAL_SKIP_PREFIXES)
+        self.assertTrue(gardener_mod.Gardener._is_internal("CREDENTIALS/x.md"))
+        self.assertTrue(gardener_mod.Gardener._is_internal("projekt/.npmrc"))
+        self.assertFalse(gardener_mod.Gardener._is_internal("notizen/plan.md"))
 
 
 if __name__ == "__main__":

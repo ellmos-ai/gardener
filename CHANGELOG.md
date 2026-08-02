@@ -1,5 +1,97 @@
 # Changelog
 
+## 2026-08-02
+
+Every agent provider on the machine is now in one search -- and the three
+transcript presets added yesterday are corrected against the formats they
+actually claim to read. All three were written from assumption, not from
+the files; measured against real transcripts, two indexed nothing at all
+and one indexed mostly noise.
+
+- **`codex` preset rewritten.** A Codex rollout carries the same
+  conversation twice: `event_msg` (`payload.type` 'user_message' /
+  'agent_message', text in a flat `payload.message`) and `response_item`
+  (the raw model exchange). The old preset read only the second one --
+  duplicating every assistant turn verbatim, pulling injected
+  AGENTS.md/skill boilerplate in as "user" text, and missing the clean
+  channel entirely. Now only `event_msg` is indexed.
+- **`codex` preset also drops sub-agent tool traffic.** When Codex
+  delegates, it wraps the sub-agent's tool calls and their output into
+  ordinary `agent_message` events prefixed `[external_agent_tool_call:
+  Read]` / `[external_agent_tool_result]`. The payload is a verbatim
+  file dump, command stderr or diff -- prose everywhere else in this
+  module is what gets indexed, and this is not it. Measured on a real
+  archive: **49,286 of 309,883 indexed Codex turns (15.9%)** were tool
+  traffic.
+- **`kimi` preset rewritten.** It looked for a `TurnBegin` wrapper and
+  flat top-level `role`/`content` strings; neither exists in a real
+  `wire.jsonl`, so the preset returned nothing for every line of every
+  file. Kimi's wire log is an event stream: agent prose arrives as
+  `context.append_loop_event` -> `content.part` (`part.type='text'`,
+  while `'think'` parts are internal reasoning), user turns as
+  `context.append_message` with `message.origin.kind='user'`. That
+  origin check matters -- roughly two thirds of user-role messages are
+  injected reminders, cron firings and hook results.
+- **`gemini_antigravity` preset narrowed.** It treated any
+  `source == "MODEL"` step as an assistant turn, which also matches
+  VIEW_FILE, RUN_COMMAND, LIST_DIRECTORY, GREP_SEARCH and CODE_ACTION --
+  file dumps, command output and diffs, i.e. exactly the tool noise the
+  Claude Code extractor skips on purpose. Only `PLANNER_RESPONSE` counts
+  now.
+- **`path` may be a list of glob patterns**, and `agent_transcripts`
+  takes **`key_by: 'name'`**. Together they solve transcript rotation:
+  Codex moves finished rollouts from `sessions/` to
+  `archived_sessions/`, and with a path-keyed state the same file came
+  back as a new key, was re-read from offset 0 and landed in the index a
+  second time under a second name. One source spanning both directories,
+  keyed on the (globally unique) filename, keeps a moved file's identity.
+- **Never-index list (`sources.EXCLUDED_PATH_SEGMENTS` /
+  `EXCLUDED_FILENAMES` / `EXCLUDED_SUFFIXES`, `sources.is_excluded()`)**,
+  enforced per file inside the adapters, so an over-broad or mistyped
+  glob cannot pull credentials into the index: `CREDENTIALS/`, `.ssh`,
+  `.gnupg`, `.gardener` itself, `node_modules`, `.git`, `.venv`,
+  `__pycache__`, and files like `.npmrc`, `.env`, `auth.json`, `*.pem`,
+  `*.key`. Segments are matched whole, so a sibling named
+  `credentials-howto.md` is not caught. `gardener.py` derives
+  `INTERNAL_SKIP_PREFIXES` from that same list -- one list to maintain,
+  and what a source adapter refuses to read, the home-folder walk
+  refuses too.
+- **`observe_sources()` batches its writes.** It used to spend three
+  connections per item (a `get`, `put`'s own, and `put`'s return `get`),
+  each opening the DB, ATTACHing the sibling and committing -- about 20
+  items/s, which is days for a six-figure transcript archive. It now
+  holds one connection per source and commits every 2000 items. Same
+  upsert, same FTS (trigger-maintained), same per-item fingerprint skip.
+- **New sources:** `codex-sessions` (rollouts across `sessions/` +
+  `archived_sessions/`), `codex-history` (the flat cross-session prompt
+  history), `gemini-transcripts` (one `transcript.jsonl` per `brain/`
+  session), `gemini-automations` (the `automation.toml` prompts),
+  `kimi-transcripts` (`wire.jsonl` per agent per session).
+  `decisions-archive` widened to `*.txt` -- the archived decision files
+  are mostly `.txt`, so only the `.md` minority was being indexed.
+- Deliberately **not** indexed, with reason: Antigravity's
+  `conversations/*.db` (content columns are Protobuf BLOBs, not text),
+  `agyhub_summaries_proto.pb` and `annotations/*.pbtxt` (binary/Protobuf),
+  `brain/*/.git` (code snapshots, not conversation), and
+  `transcript_full.jsonl` (same turns as `transcript.jsonl`, ~1.6x the
+  bytes -- indexing both would duplicate every session).
+- `rinnsal-tasks` stays registered and returns 0: both
+  `~/.rinnsal/rinnsal.db` and `scanner_tasks.db` exist, and their
+  `rinnsal_tasks` table is genuinely empty. Nothing to fix.
+- Tests: +6 (never-index list across segments/filenames/suffixes, the
+  two adapters honouring it, the shared list reaching `gardener.py`,
+  Gemini tool-step filtering, and a rotation test that moves a file
+  between directories and asserts nothing is re-indexed). Corrected the
+  two presets' tests, which had asserted the invented formats, and
+  extended the Codex one to cover sub-agent tool traffic. 67 -> 73.
+
+Measured on this machine after the change: 43 sources, `everything`
+14293 -> 284232, `user.db` 57 MB -> 529 MB. The bulk is
+`codex-sessions` (260597) -- 4663 rollouts across `sessions/` and
+`archived_sessions/`, 10.4 GB of raw JSONL. First scan 9.6 min; the
+second scan of the same 10.4 GB takes **0.7 s**, because every unchanged
+file is skipped on offset+mtime without being opened.
+
 ## 2026-08-01 (later)
 
 - **`markdown_dir`/`remember_files`: new `extra_tags`** (string or list),

@@ -86,8 +86,81 @@ class SourceItem:
 
 
 # ---------------------------------------------------------------------------
+# Never-index list (single source of truth)
+# ---------------------------------------------------------------------------
+#
+# Adapters read whatever a source config points them at. A mistyped or
+# over-broad glob must never be able to pull secrets or churn into the
+# index, so the block below is enforced per file inside the adapters
+# themselves -- not left to each source config to get right.
+#
+# gardener.py derives its observe()/sync() skip list from
+# EXCLUDED_PATH_SEGMENTS, so there is exactly one list to maintain.
+
+# Whole path segments. Matched case-insensitively against every part of
+# a path, so 'C:/_Local_DEV/CREDENTIALS/x.md' is excluded by 'credentials'.
+EXCLUDED_PATH_SEGMENTS = frozenset({
+    "credentials",      # C:\_Local_DEV\CREDENTIALS -- plaintext secrets
+    ".ssh",             # private keys
+    ".gnupg",
+    ".gardener",        # Gardener's own runtime dir (never index itself)
+    ".absorber",        # internal runtime dirs
+    ".output",
+    "node_modules",
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+})
+
+# Exact filenames (case-insensitive).
+EXCLUDED_FILENAMES = frozenset({
+    ".npmrc", ".netrc", ".pgpass", ".env", ".htpasswd",
+    "auth.json", "credentials.json", "secrets.json", "token.json",
+    "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
+})
+
+# Filename suffixes (case-insensitive) that carry key material.
+EXCLUDED_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".keystore", ".jks",
+                     ".ppk", ".asc")
+
+
+def is_excluded(path) -> bool:
+    """True if `path` must never be indexed, whatever a config asks for.
+
+    Checks whole path segments (not string prefixes), so a sibling named
+    'credentials-howto.md' is NOT excluded while '.../CREDENTIALS/x' is.
+    """
+    p = Path(path)
+    parts = [part.lower() for part in p.parts]
+    if any(part in EXCLUDED_PATH_SEGMENTS for part in parts):
+        return True
+    name = p.name.lower()
+    if name in EXCLUDED_FILENAMES:
+        return True
+    return name.endswith(EXCLUDED_SUFFIXES)
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _config_patterns(config: Dict) -> list:
+    """Returns the glob pattern(s) of a source config as a list.
+
+    `path` accepts a single pattern or a list of patterns, so one source
+    can span two directories that no single glob covers -- e.g. Codex'
+    live `sessions/` and its `archived_sessions/`, between which files
+    are moved. Keeping those in one source (instead of two) is what
+    stops a moved file from being indexed twice under two names.
+    """
+    raw = config.get("path", "")
+    if isinstance(raw, (list, tuple)):
+        raw_patterns = [str(r) for r in raw if str(r)]
+    else:
+        raw_patterns = [str(raw)] if str(raw) else []
+    return [os.path.expanduser(r) for r in raw_patterns]
+
 
 def _path_key(p: Path) -> str:
     """Windows/Unix-stable identity string for a path, for use inside
@@ -147,7 +220,8 @@ def _iter_text_files(source_id: str, config: Dict, default_patterns,
 
     config:
         path: a directory, OR a glob pattern that expands to one or
-              more directories (e.g. '~/.claude/projects/*/memory').
+              more directories (e.g. '~/.claude/projects/*/memory'),
+              OR a list of either.
         patterns: list of filename patterns matched within each
               matched directory (default: `default_patterns`;
               '**/...' patterns recurse). Every file matching ANY
@@ -164,10 +238,9 @@ def _iter_text_files(source_id: str, config: Dict, default_patterns,
               'register-log' (findable, but a consumer may choose to
               exclude it from what gets surfaced).
     """
-    raw_path = str(config.get("path", ""))
-    if not raw_path:
+    base_patterns = _config_patterns(config)
+    if not base_patterns:
         return
-    base_pattern = os.path.expanduser(raw_path)
     if "patterns" in config:
         file_patterns = list(config["patterns"])
     elif "glob" in config:
@@ -178,9 +251,18 @@ def _iter_text_files(source_id: str, config: Dict, default_patterns,
     # glob.glob() on a plain, non-wildcard, existing path simply returns
     # that path -- so this one call covers both a literal directory and
     # a wildcard-directory pattern like '.../*/memory'.
-    for base_dir in sorted(glob.glob(base_pattern, recursive=True)):
+    seen_dirs = set()
+    base_dirs = []
+    for base_pattern in base_patterns:
+        for d in sorted(glob.glob(base_pattern, recursive=True)):
+            if d not in seen_dirs:
+                seen_dirs.add(d)
+                base_dirs.append(d)
+    for base_dir in base_dirs:
         bp = Path(base_dir)
         if not bp.is_dir():
+            continue
+        if is_excluded(bp):
             continue
         # Collect matches from every pattern into a set first, then sort
         # once -- so a file matched by two patterns is only indexed once,
@@ -189,6 +271,8 @@ def _iter_text_files(source_id: str, config: Dict, default_patterns,
         for file_glob in file_patterns:
             matched_files.update(p for p in bp.glob(file_glob) if p.is_file())
         for file_path in sorted(matched_files):
+            if is_excluded(file_path):
+                continue
             try:
                 stat = file_path.stat()
                 content = file_path.read_text(encoding="utf-8", errors="replace")
@@ -446,8 +530,14 @@ def _extract_gemini_antigravity_text(entry: Dict):
             text = ""
         return (role, text) if text else (None, None)
 
-    # Planner / assistant turn
-    if tp == "PLANNER_RESPONSE" or src == "MODEL":
+    # Planner / assistant turn.
+    #
+    # Deliberately NOT `or src == "MODEL"`: that also matches VIEW_FILE,
+    # LIST_DIRECTORY, RUN_COMMAND, GREP_SEARCH and CODE_ACTION steps,
+    # which are tool action logs (file dumps, command output, diffs) --
+    # not prose the assistant wrote. Indexing those is exactly the noise
+    # the Claude Code extractor above skips on purpose.
+    if tp == "PLANNER_RESPONSE":
         role = "assistant"
         content = entry.get("content")
         if isinstance(content, str) and content.strip():
@@ -463,60 +553,121 @@ def _extract_gemini_antigravity_text(entry: Dict):
     return None, None
 
 
+_CODEX_EVENT_ROLES = {"user_message": "user", "agent_message": "assistant"}
+
+# When Codex delegates to a sub-agent it wraps that sub-agent's tool
+# traffic into ordinary 'agent_message' events, prefixed like
+# '[external_agent_tool_call: Read]' / '[external_agent_tool_result]'.
+# The payload is a verbatim tool call or its output (file dumps, command
+# stderr, diffs) -- not prose, and exactly what this module skips
+# everywhere else. Measured on a real archive: 15.9% of all indexed
+# Codex turns.
+_CODEX_TOOL_TRAFFIC_PREFIXES = ("[external_agent_tool_call",
+                                "[external_agent_tool_result")
+
+
 def _extract_codex_text(entry: Dict):
-    """Extracts (role, text) from a Codex history or session JSONL line."""
+    """Extracts (role, text) from a Codex history or session JSONL line.
+
+    A Codex rollout carries the same conversation on two channels:
+
+      - ``type='event_msg'`` with ``payload.type`` 'user_message' /
+        'agent_message' and the text as a flat ``payload.message``
+        string -- what the user actually typed and what the agent
+        actually answered.
+      - ``type='response_item'`` with ``payload.type='message'`` and a
+        ``payload.role`` -- the raw model exchange. Its assistant turns
+        duplicate 'agent_message' verbatim, its user turns additionally
+        contain injected AGENTS.md/skill/environment blocks, and its
+        'developer' role is pure system prompt.
+
+    Only the first channel is indexed: same conversation, no duplicates,
+    no injected boilerplate. Everything else in a rollout (reasoning,
+    function_call*, custom_tool_call*, mcp_tool_call_end, patch_apply_end,
+    token_count, session_meta, turn_context, world_state, and 'compacted'
+    -- which re-embeds already-indexed history) carries no new prose and
+    falls through to (None, None).
+    """
     if not isinstance(entry, dict):
         return None, None
 
-    # 1. Simple history entry: {"session_id": ..., "ts": ..., "text": ...}
+    # 1. Flat prompt history (~/.codex/history.jsonl):
+    #    {"session_id": ..., "ts": ..., "text": ...}
     if "text" in entry and isinstance(entry["text"], str) and "session_id" in entry:
-        return "user", entry["text"].strip()
+        text = entry["text"].strip()
+        return ("user", text) if text else (None, None)
 
-    # 2. Session rollout item: {"payload": {"role": "user"|"assistant", "content": ...}}
-    payload = entry.get("payload")
-    if isinstance(payload, dict):
-        role = payload.get("role")
-        if role in ("user", "assistant"):
-            content = payload.get("content")
-            if isinstance(content, str):
-                text = content.strip()
-            elif isinstance(content, list):
-                parts = []
-                for block in content:
-                    if isinstance(block, dict):
-                        b_type = block.get("type")
-                        if b_type in ("input_text", "text", "output_text"):
-                            b_text = block.get("text", "")
-                            if isinstance(b_text, str) and b_text.strip():
-                                parts.append(b_text.strip())
-                text = "\n".join(parts).strip()
-            else:
-                text = ""
-            return (role, text) if text else (None, None)
+    # 2. Session rollout, clean channel only.
+    if entry.get("type") == "event_msg":
+        payload = entry.get("payload")
+        if isinstance(payload, dict):
+            role = _CODEX_EVENT_ROLES.get(payload.get("type"))
+            if role:
+                message = payload.get("message")
+                if isinstance(message, str) and message.strip():
+                    text = message.strip()
+                    if text.startswith(_CODEX_TOOL_TRAFFIC_PREFIXES):
+                        return None, None
+                    return role, text
 
     return None, None
 
 
 def _extract_kimi_text(entry: Dict):
-    """Extracts (role, text) from a Kimi wire/session JSONL line."""
+    """Extracts (role, text) from a Kimi ``wire.jsonl`` line.
+
+    Kimi's wire log is an event stream, not a message list. Two of its
+    event kinds carry prose:
+
+      - ``context.append_loop_event`` -> ``event.type='content.part'``
+        -> ``event.part.type='text'``: what the agent wrote. Sibling
+        parts of type 'think' are internal reasoning and are skipped,
+        as are the tool.call/tool.result/step.* events around them.
+      - ``context.append_message`` -> ``message.role='user'`` with
+        ``message.origin.kind='user'``: what the user actually typed.
+        The origin check is essential -- roughly two thirds of the
+        user-role messages are injected reminders, cron firings,
+        background-task reports, hook results and skill banners, which
+        would otherwise flood the index with machine chatter.
+
+    Everything else (usage.record, llm.request, goal.*, permission.*,
+    config.update, compaction events, ...) yields (None, None).
+    """
     if not isinstance(entry, dict):
         return None, None
 
-    # TurnBegin wrapper
-    msg = entry.get("message")
-    if isinstance(msg, dict):
-        m_type = msg.get("type")
-        payload = msg.get("payload")
-        if m_type == "TurnBegin" and isinstance(payload, dict):
-            u_input = payload.get("user_input")
-            if isinstance(u_input, str) and u_input.strip():
-                return "user", u_input.strip()
+    entry_type = entry.get("type")
 
-    # Direct role/content format
-    role = entry.get("role")
-    content = entry.get("content")
-    if role in ("user", "assistant") and isinstance(content, str) and content.strip():
-        return role, content.strip()
+    # Agent output
+    if entry_type == "context.append_loop_event":
+        event = entry.get("event")
+        if isinstance(event, dict) and event.get("type") == "content.part":
+            part = event.get("part")
+            if isinstance(part, dict) and part.get("type") == "text":
+                text = part.get("text")
+                if isinstance(text, str) and text.strip():
+                    return "assistant", text.strip()
+        return None, None
+
+    # User turns actually typed by the human
+    if entry_type == "context.append_message":
+        message = entry.get("message")
+        if not isinstance(message, dict) or message.get("role") != "user":
+            return None, None
+        origin = message.get("origin")
+        if not isinstance(origin, dict) or origin.get("kind") != "user":
+            return None, None
+        content = message.get("content")
+        if isinstance(content, str):
+            text = content.strip()
+        elif isinstance(content, list):
+            parts = [b.get("text", "") for b in content
+                     if isinstance(b, dict) and b.get("type") == "text"]
+            text = "\n".join(p for p in parts
+                             if isinstance(p, str) and p.strip()).strip()
+        else:
+            text = ""
+        return ("user", text) if text else (None, None)
 
     return None, None
 
@@ -528,6 +679,17 @@ def scan_agent_transcripts(source_id: str, config: Dict,
     config:
         path: glob pattern for the JSONL files (e.g.
               '~/.claude/projects/*/**/*.jsonl'); '**' is recursive.
+              May be a LIST of patterns, to keep transcripts that live
+              in two directories in one source.
+        key_by: 'path' (default) or 'name'. With 'name', the per-file
+              offset state and the entry names are keyed on the bare
+              filename instead of the full path. Needed where a host
+              moves finished transcripts between directories (Codex
+              rotates `sessions/` -> `archived_sessions/`): under
+              'path' the same file would come back as a new key, get
+              re-read from offset 0 and land in the index a second
+              time under a second name. Only safe where filenames are
+              globally unique, as Codex' `rollout-<ts>-<uuid>.jsonl` is.
         format: 'claude_code' (default), 'gemini_antigravity', 'codex',
               'kimi', or 'generic' (uses role_field/text_field below).
         roles: which roles to index (default: ["user", "assistant"]).
@@ -550,10 +712,10 @@ def scan_agent_transcripts(source_id: str, config: Dict,
     """
     if state is None:
         state = {}
-    raw_path = str(config.get("path", ""))
-    if not raw_path:
+    path_patterns = _config_patterns(config)
+    if not path_patterns:
         return
-    path_pattern = os.path.expanduser(raw_path)
+    key_by = config.get("key_by", "path")
     fmt = config.get("format", "claude_code")
     roles = set(config.get("roles", ["user", "assistant"]))
     include_sidechain = bool(config.get("include_sidechain", False))
@@ -562,16 +724,26 @@ def scan_agent_transcripts(source_id: str, config: Dict,
     text_block_type = config.get("text_block_type", "text")
     default_role = config.get("default_role")
 
-    for file_str in sorted(glob.glob(path_pattern, recursive=True)):
+    seen_files = set()
+    candidates = []
+    for path_pattern in path_patterns:
+        for f in sorted(glob.glob(path_pattern, recursive=True)):
+            if f not in seen_files:
+                seen_files.add(f)
+                candidates.append(f)
+
+    for file_str in candidates:
         file_path = Path(file_str)
         if not file_path.is_file():
+            continue
+        if is_excluded(file_path):
             continue
         try:
             stat = file_path.stat()
         except OSError:
             continue
 
-        file_key = _path_key(file_path)
+        file_key = file_path.name if key_by == "name" else _path_key(file_path)
         prev = state.get(file_key, {})
         start_offset = prev.get("offset", 0)
         if stat.st_size < start_offset:

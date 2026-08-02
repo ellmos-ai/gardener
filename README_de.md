@@ -7,7 +7,7 @@
 [![Gardener tests](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml/badge.svg)](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests: 67 passed](https://img.shields.io/badge/tests-67%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
+[![Tests: 73 passed](https://img.shields.io/badge/tests-73%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
 [![LLM OS](https://img.shields.io/badge/LLM--OS-SQLite%20Substrate-blueviolet.svg)](https://github.com/ellmos-ai/gardener)
 
 > [!NOTE]
@@ -200,7 +200,7 @@ Vier Quellenarten:
 | `markdown_dir` | Ein Verzeichnis mit Markdown-Dateien, ein Eintrag pro Datei. `path` darf selbst ein Glob sein, das mehrere Verzeichnisse abdeckt (z. B. eine Pro-Projekt-Memory-Konvention). `patterns` erweitert dies auf andere Dateiarten (z. B. `.txt`-Notizen). `extra_tags` haengt jedem Eintrag statische Tags an, damit ein nachgelagerter Konsument Quellen jenseits des festen `type='observed'` unterscheiden kann (z. B. eine Regeldatei, die als Hinweis eingeblendet werden soll, gegenueber einer rotierenden Registry, die durchsuchbar bleiben, aber nicht eingeblendet werden soll). | `path`, `patterns` (Liste, Default `["*.md"]`), `glob` (einzelnes Muster, veralteter Alias), `extra_tags` (String oder Liste) |
 | `remember_files` | Kleine Notiz-Dateien irgendwo unterhalb einer Wurzel, gefunden über rekursives Glob. | `path`, `glob` (Default `**/.remember`) |
 | `sqlite_table` | Eine einzelne Tabelle in einer fremden SQLite-Datenbank, streng lesend geöffnet (`mode=ro`). Spaltennamen werden vor Nutzung gegen das echte Schema geprüft (Whitelist). `content` darf mehrere Spalten benennen, die der Reihe nach zusammengefügt werden — eine Zeile, deren Sinn auf zwei Textfelder verteilt ist (das Problem *und* die Lösung einer Lesson), bleibt so vollständig durchsuchbar. | `db_path`, `table`, `columns` (`content` Pflicht, String oder Liste; `id`/`name`/`tags` optional) |
-| `agent_transcripts` | JSONL-Chat-Transkripte, zeilenweise indexiert, **nur Text-Turns** (Tool-Aufrufe/-Ergebnisse und interne „Thinking"-Blöcke werden übersprungen). Bringt eingebaute Feld-Mappings für Claude Code, Gemini Antigravity, Codex und Kimi Transkriptformate mit; jedes andere zeilenbasierte JSON-Transkript lässt sich über ein generisches Dotted-Path-Role/Text-Mapping indexieren. `default_role` deckt Archive mit nur einer Rolle ab, die gar kein Rollenfeld führen — etwa eine reine Prompt-Historie. Große, wachsende Dateien werden ab einem gespeicherten Byte-Offset weitergelesen — ein Refresh liest nie erneut, was schon indexiert wurde. | `path` (Glob, `**` rekursiv), `format` (`claude_code` Default, `gemini_antigravity`, `codex`, `kimi`, oder `generic` mit `role_field`/`text_field`/`default_role`) |
+| `agent_transcripts` | JSONL-Chat-Transkripte, zeilenweise indexiert, **nur Text-Turns** (Tool-Aufrufe/-Ergebnisse und interne „Thinking"-Blöcke werden übersprungen). Bringt eingebaute Feld-Mappings für Claude Code, Gemini Antigravity, Codex und Kimi Transkriptformate mit; jedes andere zeilenbasierte JSON-Transkript lässt sich über ein generisches Dotted-Path-Role/Text-Mapping indexieren. `default_role` deckt Archive mit nur einer Rolle ab, die gar kein Rollenfeld führen — etwa eine reine Prompt-Historie. Große, wachsende Dateien werden ab einem gespeicherten Byte-Offset weitergelesen — ein Refresh liest nie erneut, was schon indexiert wurde. `path` darf eine **Liste** von Globs sein, und `key_by="name"` schlüsselt den Offset-Zustand am Dateinamen statt am vollen Pfad — zusammen deckt das Hosts ab, die Transkripte zwischen Ordnern *rotieren* (Codex verschiebt fertige Rollouts von `sessions/` nach `archived_sessions/`), was sonst jede verschobene Datei ein zweites Mal unter neuem Namen indexieren würde. | `path` (Glob oder Liste von Globs, `**` rekursiv), `format` (`claude_code` Default, `gemini_antigravity`, `codex`, `kimi`, oder `generic` mit `role_field`/`text_field`/`default_role`), `key_by` (`path` Default, oder `name`) |
 
 ```bash
 # Index this machine's Claude Code project memories
@@ -262,7 +262,36 @@ af.observe_source_add("usmc-lessons", "sqlite_table",
                        columns={"id": "id", "name": "title",
                                 "content": ["problem", "solution"],
                                 "tags": "category"})
+
+# Transkripte, die der Host zwischen zwei Ordnern rotiert: eine Quelle
+# ueber beide, am Dateinamen geschluesselt, damit eine verschobene Datei
+# ihre Identitaet behaelt
+af.observe_source_add("codex-sessions", "agent_transcripts",
+                       path=["~/.codex/sessions/**/*.jsonl",
+                             "~/.codex/archived_sessions/*.jsonl"],
+                       format="codex", key_by="name")
 ```
+
+### Was eine Quelle niemals indexieren kann
+
+Eine Quellen-Konfiguration richtet den Adapter auf einen beliebigen Glob —
+der Schutz davor, Zugangsdaten zu indexieren, kann deshalb nicht in den
+Konfigurationen liegen, sondern liegt in den Adaptern. `sources.is_excluded()`
+wird pro Datei geprueft, und keine Konfiguration kann das abschalten:
+
+- **Pfadsegmente** (ganz und case-insensitiv verglichen): `CREDENTIALS`,
+  `.ssh`, `.gnupg`, `.gardener` (Gardeners eigenes Laufzeitverzeichnis),
+  `node_modules`, `.git`, `.venv`/`venv`, `__pycache__`, `.absorber`,
+  `.output`.
+- **Dateinamen:** `.npmrc`, `.netrc`, `.pgpass`, `.env`, `auth.json`,
+  `credentials.json`, `secrets.json`, `token.json`, `id_rsa`/`id_ed25519`, …
+- **Endungen:** `.pem`, `.key`, `.p12`, `.pfx`, `.keystore`, `.jks`, …
+
+Weil Segmente ganz und nicht als String-Praefix verglichen werden, ist eine
+Nachbardatei namens `credentials-howto.md` *nicht* ausgeschlossen — nur ein
+echtes `CREDENTIALS/`-Verzeichnis. `gardener.py` leitet seine
+`observe()`/`sync()`-Ausschlussliste aus denselben Konstanten ab: eine Liste
+zu pflegen, und der Home-Ordner-Lauf kann nicht von den Adaptern abdriften.
 
 ### Eine Quelle fuer nachgelagerte Filterung taggen
 
