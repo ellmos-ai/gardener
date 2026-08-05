@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-05
+
+Fixed: the never-index list missed Windows paths on non-Windows hosts.
+
+- `sources.is_excluded()` split its argument with the host's own path
+  rules, so on Linux and macOS a raw `C:\_Local_DEV\CREDENTIALS\x.md`
+  arrived as a single segment and never matched `credentials`. Backslashes
+  now count as separators everywhere -- the block list fails closed on any
+  host. The CI runs on Linux and had been red on exactly these two cases
+  since 2026-08-02.
+
 ## 2026-08-02 (later)
 
 Secrets are now redacted on the way into the index, a credential found in a
