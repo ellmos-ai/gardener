@@ -136,8 +136,13 @@ def is_excluded(path) -> bool:
 
     Checks whole path segments (not string prefixes), so a sibling named
     'credentials-howto.md' is NOT excluded while '.../CREDENTIALS/x' is.
+
+    A backslash counts as a separator on every host, not just on Windows.
+    The index is written on Windows but read -- and tested -- on POSIX as
+    well, and there a raw 'C:\\_Local_DEV\\CREDENTIALS\\x.md' would arrive as
+    ONE segment and walk straight past the block list. Fail closed instead.
     """
-    p = Path(path)
+    p = Path(str(path).replace("\\", "/"))
     parts = [part.lower() for part in p.parts]
     if any(part in EXCLUDED_PATH_SEGMENTS for part in parts):
         return True
