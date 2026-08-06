@@ -2,7 +2,8 @@
 
 **🇩🇪 [Deutsche Version](ROADMAP_de.md)**
 
-> Updated: 2026-07-25
+> Updated: 2026-08-01
+> Current release: v0.3.1 (prototype)
 
 ## Prototype (v0.1) — DONE
 
