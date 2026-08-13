@@ -554,9 +554,16 @@ class TestFindSourceFilter(GardenerTempCase):
         self.assertEqual(len(hits), 2)
         self.assertTrue(all("usmc-working" in r["name"] for r in hits))
 
-    def test_empty_query_without_source_stays_empty(self):
+    def test_empty_query_without_source_keeps_browse_behaviour(self):
+        """Ohne Quelle bleibt die leere Query, was sie war: LIKE '%%' listet alles.
+
+        Der Nur-Quelle-Zweig darf diesen Altbestand nicht stillschweigend
+        auf [] umbiegen -- er ist der einzige Verhaltenspfad, den ein
+        bestehender Aufrufer bereits nutzen konnte.
+        """
         self._observed("usmc-working", "a", "eins")
-        self.assertEqual(self.af.find(""), [])
+        self._observed("codex-sessions", "b", "zwei")
+        self.assertEqual(len(self.af.find("")), 2)
 
     def test_source_combines_with_type(self):
         self._observed("usmc-working", "a", "Kombitest", type="observed")

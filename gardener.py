@@ -448,15 +448,15 @@ class Gardener:
         """
         conn = self._conn("user")
         results = []
+        # Nur-Quelle-Auflistung: leere Query UND gesetzte Quelle. Ohne Quelle
+        # bleibt die leere Query wie bisher der LIKE-Stufe überlassen (dort
+        # matcht '%%' alles) -- das ist bestehendes Verhalten und ändert sich hier nicht.
+        source_only = (not query or not query.strip()) and bool(self._normalize_sources(source))
         try:
-            # 0. Nur-Quelle-Auflistung: ohne Suchbegriff gibt es nichts zu matchen
-            if not query or not query.strip():
-                if self._normalize_sources(source):
-                    results = self._source_listing(conn, source, type=type, limit=limit)
-                    query = ""
-
-            # 1. Exakte / Standard-FTS5-Suche
-            if not results and query:
+            if source_only:
+                results = self._source_listing(conn, source, type=type, limit=limit)
+            else:
+                # 1. Exakte / Standard-FTS5-Suche
                 try:
                     results = self._fts_query(conn, query, type=type, limit=limit,
                                               with_snippets=with_snippets,
@@ -464,24 +464,24 @@ class Gardener:
                 except Exception:
                     results = []
 
-            # 2. Mehrwort-Fallback: Wenn 0 Treffer und Mehrwort-Query, OR-Verknüpfung in FTS5 versuchen
-            if not results and query:
-                or_query = self._build_fts_or_query(query)
-                if or_query:
+                # 2. Mehrwort-Fallback: Wenn 0 Treffer und Mehrwort-Query, OR-Verknüpfung in FTS5 versuchen
+                if not results:
+                    or_query = self._build_fts_or_query(query)
+                    if or_query:
+                        try:
+                            results = self._fts_query(conn, or_query, type=type, limit=limit,
+                                                      with_snippets=with_snippets,
+                                                      source=source)
+                        except Exception:
+                            results = []
+
+                # 3. Fallback auf LIKE-Suche, falls FTS (auch OR) fehlschlug oder 0 Treffer ergab
+                if not results:
                     try:
-                        results = self._fts_query(conn, or_query, type=type, limit=limit,
-                                                  with_snippets=with_snippets,
-                                                  source=source)
+                        results = self._like_query(conn, query, type=type, limit=limit,
+                                                   source=source)
                     except Exception:
                         results = []
-
-            # 3. Fallback auf LIKE-Suche, falls FTS (auch OR) fehlschlug oder 0 Treffer ergab
-            if not results and query:
-                try:
-                    results = self._like_query(conn, query, type=type, limit=limit,
-                                               source=source)
-                except Exception:
-                    results = []
         finally:
             conn.close()
 

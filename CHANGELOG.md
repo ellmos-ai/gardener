@@ -37,7 +37,12 @@ longer buried by a large one.
 
 Read-only change: no schema migration, no new index, `recall()` untouched, and
 existing `find()` callers keep their behaviour (the new parameter is appended
-and defaults to `None`).
+and defaults to `None`). That includes the edge case `find("")` *without* a
+source: it still falls through to the LIKE stage, where `%%` matches everything
+and the call acts as a browse. Only the combination of an empty query **and** a
+source takes the new listing path -- asserted by a test, because guarding the
+three search stages on a non-empty query would have turned that browse into an
+empty list without anyone noticing.
 
 ## 2026-08-05
 
