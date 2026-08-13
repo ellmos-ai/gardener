@@ -278,6 +278,44 @@ af.observe_source_add("usmc-lessons", "sqlite_table",
                                 "tags": "category"})
 ```
 
+### Searching one source instead of all of them
+
+Sources differ in size by three orders of magnitude. On this machine
+`codex-sessions` holds 260,000 transcript lines while `usmc-working` holds
+518 notes — so BM25 hands the whole first page to the transcripts, and a
+subject-matter search comes back looking empty. `find()` therefore takes a
+source filter:
+
+```bash
+gardener find --source usmc-working store welle
+gardener find --source usmc-working,usmc-facts store
+gardener find --source usmc-working              # no query: list the source
+gardener find --type memory --limit 5 store      # also exposed: type, limit
+```
+
+```python
+af.find("store welle", source="usmc-working")
+af.find("store", source=["usmc-working", "usmc-facts"])
+af.find("", source="usmc-working", limit=50)     # list, newest first
+```
+
+The filter is a `WHERE` condition on the `observed/<source-id>/…` namespace
+and runs **before** the ranking, in all three stages of `find()` (exact FTS,
+multi-word OR fallback, LIKE fallback). A source id matches the whole path
+segment, so `--source usmc` does not pull in `usmc-working`; a leading
+`observed/` may be written or omitted. `--source` and the `source` field in a
+result are different things — the field names the database (`user`/`system`).
+
+> [!NOTE]
+> **Older versions without `--source`:** pass the source id as a search word,
+> `gardener find usmc-working store`. Entry names are part of the full-text
+> index, so this works — it just ranks weaker than a real filter, because the
+> id competes with the query terms instead of restricting the candidate set.
+
+This is the query-time counterpart to `extra_tags` below: `extra_tags` labels a
+source when it is registered, for consumers that group several sources under one
+name; `--source` narrows a single search to a named source and needs no foresight.
+
 ### What a source can never index
 
 A source config points an adapter at whatever glob it likes, so the

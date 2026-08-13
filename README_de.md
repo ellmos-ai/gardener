@@ -280,6 +280,45 @@ af.observe_source_add("gemini-archive", "agent_transcripts",
                        zip_inner="*/.system_generated/logs/transcript.jsonl")
 ```
 
+### Eine Quelle suchen statt alle
+
+Quellen unterscheiden sich um drei Grössenordnungen: Auf dieser Maschine hält
+`codex-sessions` 260.000 Transkriptzeilen, `usmc-working` 518 Notizen — BM25 gibt
+die ganze erste Seite also den Transkripten, und eine Fachsuche sieht aus, als
+gäbe es nichts. `find()` nimmt deshalb einen Quellenfilter entgegen:
+
+```bash
+gardener find --source usmc-working store welle
+gardener find --source usmc-working,usmc-facts store
+gardener find --source usmc-working              # ohne Suchbegriff: Quelle auflisten
+gardener find --type memory --limit 5 store      # ebenfalls neu durchgereicht
+```
+
+```python
+af.find("store welle", source="usmc-working")
+af.find("store", source=["usmc-working", "usmc-facts"])
+af.find("", source="usmc-working", limit=50)     # auflisten, neueste zuerst
+```
+
+Der Filter ist eine `WHERE`-Bedingung auf den Namensraum `observed/<quell-id>/…`
+und wirkt **vor** dem Ranking, in allen drei Stufen von `find()` (exakte
+FTS-Suche, Mehrwort-ODER-Fallback, LIKE-Fallback). Eine Quell-ID matcht das ganze
+Pfadsegment, `--source usmc` zieht also nicht `usmc-working` mit; ein
+vorangestelltes `observed/` darf man schreiben oder weglassen. `--source` und das
+Feld `source` im Ergebnis sind zweierlei — das Feld benennt die Datenbank
+(`user`/`system`).
+
+> [!NOTE]
+> **Ältere Versionen ohne `--source`:** die Quell-ID als Suchwort mitgeben,
+> `gardener find usmc-working store`. Eintragsnamen stehen im Volltextindex, das
+> funktioniert also — es rankt nur schwächer als ein echter Filter, weil die ID
+> mit den Suchbegriffen konkurriert, statt die Kandidatenmenge einzuschränken.
+
+Das ist das Gegenstück zur Abfragezeit zu `extra_tags` weiter unten: `extra_tags`
+etikettiert eine Quelle bei der Registrierung, für Konsumenten, die mehrere
+Quellen unter einem Namen bündeln; `--source` verengt eine einzelne Suche auf
+eine benannte Quelle und braucht keine Vorausplanung.
+
 ### Was eine Quelle niemals indexieren kann
 
 Eine Quellen-Konfiguration richtet den Adapter auf einen beliebigen Glob —

@@ -2,8 +2,8 @@
 
 **🇬🇧 [English Version](ROADMAP.md)**
 
-> Aktualisiert: 2026-08-01
-> Aktuelle Version: v0.3.1 (Prototyp)
+> Aktualisiert: 2026-08-13
+> Aktuelle Version: v0.4.0 (Prototyp)
 
 ## Prototyp (v0.1) — ERLEDIGT
 

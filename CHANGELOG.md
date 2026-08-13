@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-08-13
+
+`find()` can be restricted to one observe-source, so a small source is no
+longer buried by a large one.
+
+- **`--source <id>[,<id>]` / `find(source=...)`** filters on the
+  `observed/<source-id>/…` namespace as a `WHERE` condition -- before the
+  ranking, and in all three stages of `find()`: exact FTS, the multi-word OR
+  fallback, and the LIKE fallback. Wiring it into only the first stage would
+  have dropped the filter silently on any multi-word query.
+  - Why it was needed: source sizes differ by three orders of magnitude. On
+    the reporting machine `codex-sessions` holds 260,623 transcript lines
+    against 518 in `usmc-working`, out of 290,902 `observed` entries total.
+    BM25 hands the entire first page to the transcripts, so a subject-matter
+    search returns nothing usable and reads as "not in the index".
+  - A source id matches a whole path segment, so `--source usmc` does not
+    pull in `usmc-working`. A leading `observed/` is optional, several ids
+    are OR-ed, and `_`/`%` in an id are escaped instead of acting as LIKE
+    wildcards.
+- **`--source` without a query lists the source**, newest first. FTS5 needs a
+  term to match; "show me everything from this source" has none, so that case
+  takes a plain `WHERE`/`ORDER BY updated` path instead of returning nothing.
+- **`--type` and `--limit` are now reachable from the CLI.** `find()` already
+  accepted both; only the command line did not pass them through.
+- **The `find` command parses its own flags.** The CLI has no argparse and
+  joined everything after `find` into the query, so `--source` would have
+  become a search word. `_parse_find_args()` splits options from search terms,
+  accepts `--flag value` and `--flag=value`, and reports unknown options and
+  missing values instead of silently searching for them.
+- Documented in `README.md` and `README_de.md`, including the pre-existing
+  workaround for older versions (pass the source id as a search word -- entry
+  names are in the full-text index) and the boundary against `extra_tags`,
+  which labels a source at registration time rather than narrowing one search.
+- Test suite grew from 86 to 108 tests.
+
+Read-only change: no schema migration, no new index, `recall()` untouched, and
+existing `find()` callers keep their behaviour (the new parameter is appended
+and defaults to `None`).
+
 ## 2026-08-05
 
 Fixed: the never-index list missed Windows paths on non-Windows hosts.

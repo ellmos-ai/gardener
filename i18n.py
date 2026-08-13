@@ -26,6 +26,34 @@ _BUILTIN_TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "help.heap": {"de": "Halde", "en": "Heap"},
     "help.files": {"de": "Dateien", "en": "files"},
     "cmd.find": {"de": "Suche", "en": "Search"},
+    "help.find_filters": {
+        "de": "find-Filter (wirken VOR dem Ranking):",
+        "en": "find filters (applied before ranking):",
+    },
+    "help.find_source": {
+        "de": "nur diese observe-Quelle(n), Namensraum observed/<id>/...",
+        "en": "restrict to these observe-source(s), namespace observed/<id>/...",
+    },
+    "help.find_type": {
+        "de": "nur diesen Typ (observed, knowledge, memory, ...)",
+        "en": "restrict to this type (observed, knowledge, memory, ...)",
+    },
+    "help.find_limit": {
+        "de": "max. Treffer (Standard 20)",
+        "en": "max. results (default 20)",
+    },
+    "help.find_listing": {
+        "de": "Ohne Suchbegriff listet --source die Quelle auf (neueste zuerst).",
+        "en": "Without a query, --source lists the source (newest first).",
+    },
+    "help.find_legacy": {
+        "de": ("Ältere Versionen ohne --source: Quell-ID als Suchwort mitgeben "
+               "('gardener find usmc-working store') -- der Name steht im "
+               "Volltextindex, rankt aber schwächer als der echte Filter."),
+        "en": ("Older versions without --source: pass the source id as a search "
+               "word ('gardener find usmc-working store') -- entry names are in "
+               "the full-text index, but this ranks weaker than a real filter."),
+    },
     "cmd.gui": {
         "de": "Such-GUI im Browser (lokal, read-only)",
         "en": "Search GUI in the browser (local, read-only)",

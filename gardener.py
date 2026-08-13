@@ -231,9 +231,61 @@ class Gardener:
 
         return " OR ".join(cleaned)
 
+    @staticmethod
+    def _like_escape(value: str) -> str:
+        """Maskiert LIKE-Platzhalter, damit ein Präfix wörtlich gilt.
+
+        Quell-IDs enthalten regelmäßig Bindestriche, aber `_` wäre in LIKE
+        ein Platzhalter für ein beliebiges Zeichen. Passend dazu setzen alle
+        Abfragen, die diesen Helfer nutzen, ``ESCAPE '\\'``.
+        """
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    @classmethod
+    def _normalize_sources(cls, source) -> List[str]:
+        """Normalisiert eine --source-Angabe zu einer Liste von Quell-IDs.
+
+        Akzeptiert 'usmc-working', 'observed/usmc-working', 'a,b' oder
+        ['a', 'b']; ein vorangestelltes 'observed/' und Schrägstriche am Rand
+        werden abgeschnitten, damit beide Schreibweisen dasselbe treffen.
+        """
+        if source is None:
+            return []
+        raw = source.split(",") if isinstance(source, str) else list(source)
+        ids = []
+        for item in raw:
+            sid = str(item).strip().strip("/")
+            if sid.lower().startswith("observed/"):
+                sid = sid[len("observed/"):]
+            sid = sid.strip("/")
+            if sid:
+                ids.append(sid)
+        return ids
+
+    @classmethod
+    def _source_filter(cls, source, column: str = "e.name"):
+        """Baut eine WHERE-Bedingung auf den Namensraum einer Quelle.
+
+        Beobachtete Einträge heißen ``observed/<quell-id>/<rest>``; gefiltert
+        wird deshalb auf genau dieses Präfix (plus den Eintrag der Quelle
+        selbst, falls es keinen Rest gibt). Mehrere Quellen werden ODER-verknüpft.
+
+        Returns:
+            (sql_fragment, params) oder (None, []) wenn nichts zu filtern ist
+        """
+        ids = cls._normalize_sources(source)
+        if not ids:
+            return None, []
+        parts, params = [], []
+        for sid in ids:
+            parts.append(f"({column} LIKE ? ESCAPE '\\' OR {column} = ?)")
+            params.extend([cls._like_escape(f"observed/{sid}/") + "%", f"observed/{sid}"])
+        return "(" + " OR ".join(parts) + ")", params
+
     def _fts_query(self, conn: sqlite3.Connection, match_query: str,
                    type: Optional[str] = None, limit: int = 20,
-                   with_snippets: bool = False) -> List[Dict]:
+                   with_snippets: bool = False,
+                   source=None) -> List[Dict]:
         """Führt FTS5-Suche über beide Datenbanken aus."""
         results = []
         # snippet()/rank und die MATCH-Spalte brauchen den unqualifizierten
@@ -257,6 +309,11 @@ class Gardener:
                 sql += " AND e.type = ?"
                 params.append(type)
 
+            src_sql, src_params = self._source_filter(source)
+            if src_sql:
+                sql += f" AND {src_sql}"
+                params.extend(src_params)
+
             sql += " ORDER BY rank LIMIT ?"
             params.append(limit)
 
@@ -266,7 +323,8 @@ class Gardener:
         return results
 
     def _like_query(self, conn: sqlite3.Connection, query: str,
-                    type: Optional[str] = None, limit: int = 20) -> List[Dict]:
+                    type: Optional[str] = None, limit: int = 20,
+                    source=None) -> List[Dict]:
         """Fallback-LIKE-Suche über beide Datenbanken."""
         results = []
         tokens = [t.strip() for t in query.split() if t.strip()]
@@ -282,6 +340,11 @@ class Gardener:
             if type:
                 sql += " AND e.type = ?"
                 params.append(type)
+
+            src_sql, src_params = self._source_filter(source)
+            if src_sql:
+                sql += f" AND {src_sql}"
+                params.extend(src_params)
 
             sql += " LIMIT ?"
             params.append(limit)
@@ -307,6 +370,12 @@ class Gardener:
                 if type:
                     sql += " AND e.type = ?"
                     params.append(type)
+
+                src_sql, src_params = self._source_filter(source)
+                if src_sql:
+                    sql += f" AND {src_sql}"
+                    params.extend(src_params)
+
                 sql += " LIMIT ?"
                 params.append(limit)
 
@@ -320,8 +389,37 @@ class Gardener:
     # API: find()
     # ------------------------------------------------------------------
 
+    def _source_listing(self, conn: sqlite3.Connection, source,
+                        type: Optional[str] = None, limit: int = 20) -> List[Dict]:
+        """Listet eine Quelle ohne Volltextsuche (neueste zuerst).
+
+        Für den Fall `find(query="", source="usmc-working")`: FTS5 braucht
+        einen Suchbegriff, "zeig mir alles aus dieser Quelle" hat aber keinen.
+        """
+        src_sql, src_params = self._source_filter(source)
+        if not src_sql:
+            return []
+        results = []
+        for db_prefix, db_label in [("main", "user"), ("other", "system")]:
+            sql = f"""
+                SELECT e.*, '{db_label}' as source
+                FROM {db_prefix}.everything e
+                WHERE {src_sql}
+            """
+            params = list(src_params)
+            if type:
+                sql += " AND e.type = ?"
+                params.append(type)
+            sql += " ORDER BY e.updated DESC LIMIT ?"
+            params.append(limit)
+
+            for row in conn.execute(sql, params).fetchall():
+                results.append(self._row_to_dict(row))
+        return results
+
     def find(self, query: str, type: Optional[str] = None,
-             limit: int = 20, with_snippets: bool = False) -> List[Dict]:
+             limit: int = 20, with_snippets: bool = False,
+             source=None) -> List[Dict]:
         """Durchsucht beide Datenbanken. Der primäre Zugang zu allem.
 
         Bei Mehrwort-Suchanfragen (z. B. 'Registry Mitgliedschaft') wird zunächst
@@ -330,13 +428,20 @@ class Gardener:
         FTS5-BM25-Ranking (Treffer mit allen/mehreren Begriffen stehen höher).
 
         Args:
-            query: Suchbegriff (Volltextsuche)
+            query: Suchbegriff (Volltextsuche). Leer erlaubt, wenn `source`
+                gesetzt ist -- dann wird die Quelle schlicht aufgelistet.
             type: Optional filtern nach Typ (knowledge, tool, task, memory, ...)
             limit: Max. Ergebnisse
             with_snippets: Bei True enthalten FTS-Treffer ein 'snippet'-Feld
                 mit Treffer-Kontext aus dem Inhalt (Marker '>>>'/'<<<',
                 BACH-unified_search-Muster). LIKE-Fallback-Treffer haben
                 kein Snippet.
+            source: Auf eine oder mehrere observe-Quellen einschränken
+                ('usmc-working' oder 'a,b'). Wirkt als WHERE-Bedingung auf den
+                Namensraum `observed/<quell-id>/...`, also VOR dem Ranking:
+                ohne das verdrängen die grossen Transkript-Quellen per BM25
+                jede Fachsuche. NICHT zu verwechseln mit dem Feld 'source' im
+                Ergebnis -- das benennt die Datenbank ('user'/'system').
 
         Returns:
             Liste von Einträgen als Dicts
@@ -344,27 +449,37 @@ class Gardener:
         conn = self._conn("user")
         results = []
         try:
+            # 0. Nur-Quelle-Auflistung: ohne Suchbegriff gibt es nichts zu matchen
+            if not query or not query.strip():
+                if self._normalize_sources(source):
+                    results = self._source_listing(conn, source, type=type, limit=limit)
+                    query = ""
+
             # 1. Exakte / Standard-FTS5-Suche
-            try:
-                results = self._fts_query(conn, query, type=type, limit=limit,
-                                          with_snippets=with_snippets)
-            except Exception:
-                results = []
+            if not results and query:
+                try:
+                    results = self._fts_query(conn, query, type=type, limit=limit,
+                                              with_snippets=with_snippets,
+                                              source=source)
+                except Exception:
+                    results = []
 
             # 2. Mehrwort-Fallback: Wenn 0 Treffer und Mehrwort-Query, OR-Verknüpfung in FTS5 versuchen
-            if not results:
+            if not results and query:
                 or_query = self._build_fts_or_query(query)
                 if or_query:
                     try:
                         results = self._fts_query(conn, or_query, type=type, limit=limit,
-                                                  with_snippets=with_snippets)
+                                                  with_snippets=with_snippets,
+                                                  source=source)
                     except Exception:
                         results = []
 
             # 3. Fallback auf LIKE-Suche, falls FTS (auch OR) fehlschlug oder 0 Treffer ergab
-            if not results:
+            if not results and query:
                 try:
-                    results = self._like_query(conn, query, type=type, limit=limit)
+                    results = self._like_query(conn, query, type=type, limit=limit,
+                                               source=source)
                 except Exception:
                     results = []
         finally:
@@ -1510,6 +1625,49 @@ if 'execute' in dir():
 # CLI (minimal)
 # ---------------------------------------------------------------------------
 
+def _parse_find_args(args: List[str]):
+    """Trennt Optionen von Suchwörtern für `gardener find`.
+
+    Das CLI kommt ohne argparse aus; ohne diese Trennung landete '--source'
+    schlicht im Suchstring. Unterstützt '--flag wert' und '--flag=wert';
+    alles ohne führende '--' gilt als Suchwort.
+
+    Returns:
+        (opts, words, error) -- error ist None, wenn alles verstanden wurde
+    """
+    opts = {"source": None, "type": None, "limit": 20}
+    words: List[str] = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg.startswith("--"):
+            if "=" in arg:
+                key, value = arg[2:].split("=", 1)
+                step = 1
+            else:
+                key, value, step = arg[2:], None, 2
+                if i + 1 < len(args):
+                    value = args[i + 1]
+            if key not in opts:
+                return opts, words, f"Unbekannte Option: {arg}"
+            if value is None or value == "":
+                return opts, words, f"Option --{key} braucht einen Wert."
+            if key == "limit":
+                try:
+                    opts["limit"] = int(value)
+                except ValueError:
+                    return opts, words, f"Ungültiger Wert für --limit: {value}"
+                if opts["limit"] < 1:
+                    return opts, words, "--limit muss mindestens 1 sein."
+            else:
+                opts[key] = value
+            i += step
+        else:
+            words.append(arg)
+            i += 1
+    return opts, words, None
+
+
 def main():
     """Minimales CLI für Gardener."""
     from i18n import t
@@ -1557,18 +1715,45 @@ def main():
         ]
         for usage, label_key in commands:
             print(f"  {usage:<32} {t(label_key)}")
+        print()
+        print(f"  {t('help.find_filters')}")
+        for flag, label_key in [
+            ("--source <id>[,<id>]", "help.find_source"),
+            ("--type <typ>", "help.find_type"),
+            ("--limit <n>", "help.find_limit"),
+        ]:
+            print(f"    {flag:<22} {t(label_key)}")
+        print(f"    {t('help.find_listing')}")
+        print(f"    {t('help.find_legacy')}")
         return
 
     cmd = sys.argv[1]
 
     if cmd == "find":
-        query = " ".join(sys.argv[2:]) if len(sys.argv) > 2 else ""
-        results = af.find(query)
+        opts, words, err = _parse_find_args(sys.argv[2:])
+        if err:
+            print(f"  {err}")
+            print("  Nutzung: gardener find [--source <id>[,<id>]] [--type <typ>] "
+                  "[--limit <n>] <query>")
+            return
+        query = " ".join(words)
+        if not query and not opts["source"]:
+            print("  Nutzung: gardener find [--source <id>[,<id>]] [--type <typ>] "
+                  "[--limit <n>] <query>")
+            print("  Ohne Suchbegriff braucht es mindestens --source "
+                  "(dann wird die Quelle aufgelistet).")
+            return
+
+        results = af.find(query, type=opts["type"], limit=opts["limit"],
+                          source=opts["source"])
         for r in results:
             src = r.get("source", "?")
             print(f"  [{r['type']:10s}] {r['name']:30s} ({src})")
         if not results:
-            print("  Keine Ergebnisse.")
+            aktiv = [f"{k}={v}" for k, v in
+                     (("--source", opts["source"]), ("--type", opts["type"])) if v]
+            zusatz = f" (Filter aktiv: {', '.join(aktiv)})" if aktiv else ""
+            print(f"  Keine Ergebnisse.{zusatz}")
 
     elif cmd == "gui":
         # Such-GUI für menschliche Nutzer (lokaler Webserver, read-only)

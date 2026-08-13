@@ -462,5 +462,188 @@ class TestGardenerHardening(GardenerTempCase):
             self.assertEqual(row[0], 1)
 
 
+class TestFindSourceFilter(GardenerTempCase):
+    """find(source=...) -- WHERE-Filter auf den observed/<id>/-Namensraum."""
+
+    def _observed(self, source_id, key, content, type="observed"):
+        return self.af.put(f"observed/{source_id}/{key}", content=content, type=type)
+
+    def test_source_filter_restricts_to_one_source(self):
+        self._observed("usmc-working", "n1", "Store-Welle eingereicht")
+        self._observed("codex-sessions", "n2", "Store-Welle eingereicht")
+
+        hits = self.af.find("Store-Welle", source="usmc-working")
+        self.assertEqual(len(hits), 1)
+        self.assertTrue(hits[0]["name"].startswith("observed/usmc-working/"))
+
+    def test_source_filter_beats_bulk_source_in_ranking(self):
+        """Der eigentliche Fehlerfall: die grosse Quelle verdraengt die kleine."""
+        for i in range(40):
+            self._observed("codex-sessions", f"line{i}", "Store Welle Einreichung Notiz")
+        self._observed("usmc-working", "treffer", "Store Welle Einreichung Notiz")
+
+        ungefiltert = self.af.find("Store Welle Einreichung", limit=5)
+        self.assertTrue(all("codex-sessions" in r["name"] for r in ungefiltert))
+
+        gefiltert = self.af.find("Store Welle Einreichung", limit=5, source="usmc-working")
+        self.assertEqual(len(gefiltert), 1)
+        self.assertEqual(gefiltert[0]["name"], "observed/usmc-working/treffer")
+
+    def test_source_filter_accepts_multiple_ids(self):
+        self._observed("usmc-working", "a", "gemeinsamer Begriff")
+        self._observed("usmc-facts", "b", "gemeinsamer Begriff")
+        self._observed("codex-sessions", "c", "gemeinsamer Begriff")
+
+        hits = self.af.find("gemeinsamer", source="usmc-working,usmc-facts")
+        self.assertEqual(len(hits), 2)
+        self.assertFalse(any("codex-sessions" in r["name"] for r in hits))
+
+    def test_source_filter_accepts_list_and_observed_prefix(self):
+        self._observed("usmc-working", "a", "Testinhalt")
+        self._observed("codex-sessions", "b", "Testinhalt")
+
+        self.assertEqual(len(self.af.find("Testinhalt", source=["usmc-working"])), 1)
+        self.assertEqual(len(self.af.find("Testinhalt", source="observed/usmc-working")), 1)
+        self.assertEqual(len(self.af.find("Testinhalt", source="observed/usmc-working/")), 1)
+
+    def test_source_id_matches_whole_segment_only(self):
+        """'usmc' darf 'usmc-working' nicht mitnehmen -- Praefix ist bis zum Slash."""
+        self._observed("usmc-working", "a", "Segmenttest")
+        self._observed("usmc", "b", "Segmenttest")
+
+        hits = self.af.find("Segmenttest", source="usmc")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["name"], "observed/usmc/b")
+
+    def test_source_filter_escapes_like_wildcards(self):
+        """'_' ist ein LIKE-Platzhalter und darf nicht als solcher wirken."""
+        self._observed("a_b", "x", "Wildcardtest")
+        self._observed("axb", "y", "Wildcardtest")
+
+        hits = self.af.find("Wildcardtest", source="a_b")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["name"], "observed/a_b/x")
+
+    def test_source_filter_survives_multi_word_or_fallback(self):
+        """Stufe 2 von find(): OR-Fallback darf den Filter nicht verlieren."""
+        self._observed("codex-sessions", "a", "Alpha")
+        self._observed("usmc-working", "b", "Beta")
+
+        # Kein Eintrag enthaelt beide Woerter -> exakte FTS-Suche liefert 0,
+        # der OR-Fallback greift.
+        hits = self.af.find("Alpha Beta", source="usmc-working")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["name"], "observed/usmc-working/b")
+
+    def test_source_filter_survives_like_fallback(self):
+        """Stufe 3 von find(): auch die LIKE-Suche filtert nach Quelle."""
+        self._observed("codex-sessions", "a", "Teilwortsuche")
+        self._observed("usmc-working", "b", "Teilwortsuche")
+
+        with self.af.connection("user") as conn:
+            hits = self.af._like_query(conn, "eilwortsuch", source="usmc-working")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["name"], "observed/usmc-working/b")
+
+    def test_source_without_query_lists_the_source(self):
+        self._observed("usmc-working", "a", "eins")
+        self._observed("usmc-working", "b", "zwei")
+        self._observed("codex-sessions", "c", "drei")
+
+        hits = self.af.find("", source="usmc-working")
+        self.assertEqual(len(hits), 2)
+        self.assertTrue(all("usmc-working" in r["name"] for r in hits))
+
+    def test_empty_query_without_source_stays_empty(self):
+        self._observed("usmc-working", "a", "eins")
+        self.assertEqual(self.af.find(""), [])
+
+    def test_source_combines_with_type(self):
+        self._observed("usmc-working", "a", "Kombitest", type="observed")
+        self._observed("usmc-working", "b", "Kombitest", type="memory")
+
+        hits = self.af.find("Kombitest", source="usmc-working", type="memory")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["type"], "memory")
+
+    def test_find_without_source_is_unchanged(self):
+        self._observed("usmc-working", "a", "Rueckwaertskompatibel")
+        self._observed("codex-sessions", "b", "Rueckwaertskompatibel")
+
+        self.assertEqual(len(self.af.find("Rueckwaertskompatibel")), 2)
+        self.assertEqual(len(self.af.find("Rueckwaertskompatibel", source=None)), 2)
+        self.assertEqual(len(self.af.find("Rueckwaertskompatibel", source="")), 2)
+
+    def test_unknown_source_yields_no_hits(self):
+        self._observed("usmc-working", "a", "Vorhanden")
+        self.assertEqual(self.af.find("Vorhanden", source="gibtsnicht"), [])
+
+    def test_normalize_sources_helper(self):
+        norm = self.gardener.Gardener._normalize_sources
+        self.assertEqual(norm(None), [])
+        self.assertEqual(norm(""), [])
+        self.assertEqual(norm("a"), ["a"])
+        self.assertEqual(norm("a,b"), ["a", "b"])
+        self.assertEqual(norm(" a , b "), ["a", "b"])
+        self.assertEqual(norm("observed/a/"), ["a"])
+        self.assertEqual(norm(["observed/a", "b"]), ["a", "b"])
+        self.assertEqual(norm("a,,b"), ["a", "b"])
+
+
+class TestFindArgParsing(unittest.TestCase):
+    """Das find-CLI kennt kein argparse -- die Trennung muss selbst stimmen."""
+
+    def setUp(self):
+        import gardener
+
+        self.parse = gardener._parse_find_args
+
+    def test_plain_query_has_no_options(self):
+        opts, words, err = self.parse(["store", "welle"])
+        self.assertIsNone(err)
+        self.assertEqual(words, ["store", "welle"])
+        self.assertIsNone(opts["source"])
+        self.assertEqual(opts["limit"], 20)
+
+    def test_source_is_not_swallowed_into_the_query(self):
+        opts, words, err = self.parse(["--source", "usmc-working", "store"])
+        self.assertIsNone(err)
+        self.assertEqual(opts["source"], "usmc-working")
+        self.assertEqual(words, ["store"])
+
+    def test_equals_form(self):
+        opts, words, err = self.parse(["--source=usmc-working", "--type=memory", "store"])
+        self.assertIsNone(err)
+        self.assertEqual(opts["source"], "usmc-working")
+        self.assertEqual(opts["type"], "memory")
+        self.assertEqual(words, ["store"])
+
+    def test_limit_is_an_int(self):
+        opts, words, err = self.parse(["--limit", "5", "store"])
+        self.assertIsNone(err)
+        self.assertEqual(opts["limit"], 5)
+
+    def test_bad_limit_reports_error(self):
+        _, _, err = self.parse(["--limit", "viele"])
+        self.assertIsNotNone(err)
+        _, _, err = self.parse(["--limit", "0"])
+        self.assertIsNotNone(err)
+
+    def test_unknown_option_reports_error(self):
+        _, _, err = self.parse(["--quelle", "x"])
+        self.assertIsNotNone(err)
+        self.assertIn("--quelle", err)
+
+    def test_missing_value_reports_error(self):
+        _, _, err = self.parse(["store", "--source"])
+        self.assertIsNotNone(err)
+
+    def test_options_may_follow_the_query(self):
+        opts, words, err = self.parse(["store", "--source", "usmc-working"])
+        self.assertIsNone(err)
+        self.assertEqual(words, ["store"])
+        self.assertEqual(opts["source"], "usmc-working")
+
+
 if __name__ == "__main__":
     unittest.main()
