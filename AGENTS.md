@@ -2,8 +2,8 @@
 
 > **Modul:** `ellmos-ai/gardener`  
 > **Kanonischer Quellpfad:** `C:\_Local_DEV\repos\gardener`  
-> **Spiegel / Referenz:** `C:\Users\User\OneDrive\.TOPICS\.AI\.MODULES\.MEMORY\gardener`  
-> **Zentrales Log- & Registrierungsverfahren:** `C:\Users\User\OneDrive\.SYNC\workstation\antigravity-automations-reference\`
+> **Spiegel / Referenz (je Host):** `%USERPROFILE%\OneDrive\.TOPICS\.AI\.MODULES\.MEMORY\gardener`
+> **Zentrales Log- & Registrierungsverfahren (je Host):** `%USERPROFILE%\OneDrive\.SYNC\workstation\antigravity-automations-reference\`
 
 ---
 
@@ -30,11 +30,20 @@ Zusammenarbeit im drei Musketiere Systemverbund:
 3. **Pfad-Autorität (`HOOK-PATH-VALIDATION-01`):** Code-Entwicklung ausschließlich im lokalen Quellordner (`C:\_Local_DEV\repos\gardener`). OneDrive dient nur als Spiegel/Sicherung.
 4. **Visuals & Guardrails (`HOOK-BANNER-ASSET-01`):** Keine doppelten Header-Banners oder überschriebene Assets generieren.
 
+### Host-Auflösung
+
+- `%USERPROFILE%` wird auf dem aktiven Host aufgelöst; ein fester Benutzerpfad
+  aus einem anderen Host ist kein gültiger Ersatz.
+- Laufzeit-Prompts verwenden den hostspezifischen Sidecar
+  `sidecar-%COMPUTERNAME%.json`, wenn er für den Host registriert ist.
+- `sidecar.json` bleibt der dokumentierte Laptop-Default. Ihn nicht mit einem
+  Workstation-Pfad überschreiben und keine fremde Host-Sidecar-Datei verändern.
+
 ---
 
 ## 4. Test- & Registrierungsverfahren
 
 - **Test-Suite:** `pytest` im Root ausführen (`tests/`).
 - **Zentrales Logging:**
-  - Log: `C:\Users\User\OneDrive\.SYNC\workstation\antigravity-automations-reference\ANTIGRAVITY-LOG.txt`
-  - Registry: `C:\Users\User\OneDrive\.SYNC\workstation\antigravity-automations-reference\ANTIGRAVITY-REGISTRY.md`
+  - Log: `%USERPROFILE%\OneDrive\.SYNC\workstation\antigravity-automations-reference\ANTIGRAVITY-LOG.txt`
+  - Registry: `%USERPROFILE%\OneDrive\.SYNC\workstation\antigravity-automations-reference\ANTIGRAVITY-REGISTRY.md`
