@@ -5,17 +5,21 @@
 # gardener — Database-Based OS for LLMs
 
 [![Gardener tests](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml/badge.svg)](https://github.com/ellmos-ai/gardener/actions/workflows/tests.yml)
+[![Version: 0.4.0](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/ellmos-ai/gardener)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests: 85 passed](https://img.shields.io/badge/tests-85%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
+[![Tests: 108 passed](https://img.shields.io/badge/tests-108%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
 [![LLM OS](https://img.shields.io/badge/LLM--OS-SQLite%20Substrate-blueviolet.svg)](https://github.com/ellmos-ai/gardener)
+[![Part of ellmos-ai](https://img.shields.io/badge/ecosystem-ellmos--ai-informational.svg)](https://github.com/ellmos-ai)
+[![open-bricks](https://img.shields.io/badge/umbrella-open--bricks-blue.svg)](https://github.com/open-bricks)
+[![LLM-Ready](https://img.shields.io/badge/LLM--Ready-llms.txt-orange.svg)](llms.txt)
 
 > [!NOTE]
 > **LLM / Agenten-Integration**: Gardener stellt ein ein-Tabellen-FTS5-SQLite-Substrat (`gardener.db` / `user.db`) mit den Primitiven `find`, `get`, `put` und `run` bereit. Siehe [`llms.txt`](llms.txt) für maschinenlesbare Dokumentation.
 
 **🇬🇧 [English Version](README.md)**
 
-> Status: Prototyp (v0.3.1) | Autor: Lukas Geiger + Claude
+> Status: Prototyp (v0.4.0) | Autor: Lukas Geiger + Claude
 
 ## Was ist Gardener?
 
@@ -82,6 +86,39 @@ keine zusätzlichen Abhängigkeiten; bindet nur auf 127.0.0.1 und ist
 streng read-only gegenüber beiden Datenbanken.
 
 ## Architektur
+
+```mermaid
+flowchart TD
+    subgraph UI ["Schnittstellen & Steuerung"]
+        CLI["gardener CLI<br/>(find, get, put, run, gui)"]
+        API["Python API<br/>(Gardener-Klasse)"]
+        GUI["Such-GUI<br/>(127.0.0.1 HTTP Server)"]
+    end
+
+    subgraph CORE ["Gardener Kern-Engine"]
+        FTS["SQLite FTS5 Volltextsuche<br/>(BM25-Ranking & Snippets)"]
+        EXEC["Ausführungs-Engine<br/>(Materialisierung & Tool-Run)"]
+        OBS["Föderierte Observe-Engine<br/>(Secret-Redaction & Cloud-Alert)"]
+    end
+
+    subgraph SUBSTRATE ["SQLite Dual-Datenbank Substrat"]
+        GDB[("gardener.db (System)<br/>• Wissen & Dokumente<br/>• System-Tools<br/>• Initial-Blueprints")]
+        UDB[("user.db (Benutzerdaten)<br/>• Notizen & Memos<br/>• Aufgaben & Prioritäten<br/>• Beobachtete Fremddaten")]
+    end
+
+    subgraph SOURCES ["Föderierte Beobachtungsquellen (Read-Only)"]
+        S1["Markdown-Verzeichnisse & Regeln<br/>(patterns=['*.md', '*.txt'])"]
+        S2[".remember Notizdateien"]
+        S3["Fremde SQLite-DBs<br/>(mode=ro, BACH/USMC)"]
+        S4["Multi-Agenten-Transkripte<br/>(Claude, Codex, Gemini, Kimi)"]
+    end
+
+    CLI --> CORE
+    API --> CORE
+    GUI --> FTS
+    CORE --> SUBSTRATE
+    SOURCES --> OBS --> UDB
+```
 
 ```
 Gardener/
@@ -451,6 +488,26 @@ Gardener ist als Kern gedacht, der durch ellmos-Module erweiterbar wird:
 Die Vision: Das LLM bedient sich selbst aus einer Bibliothek von Modulen.
 Gardener stellt die Suche, das Gedächtnis und die Ausführungsumgebung —
 alles andere kommt als Plugin dazu wenn es gebraucht wird.
+
+### Geschwisterwerkzeuge & Ökosystem
+
+Gardener ist Teil der **ellmos-ai**- und **open-bricks**-Ökosysteme für modulare, lokale LLM-Werkzeuge:
+
+| Repository | Schwerpunkt / Beschreibung | Kategorie |
+|---|---|---|
+| [ellmos-core](https://github.com/ellmos-ai/ellmos-core) | Modularer Agenten-Ausführungskern & Prompt-Evidence-Engine | Kern-Framework |
+| [clutch](https://github.com/ellmos-ai/clutch) | Universeller Multi-Provider LLM-CLI-Client (Anthropic, Gemini, OpenAI, Ollama) | CLI & Routing |
+| [BACH](https://github.com/ellmos-ai/bach) | Dateizentriertes textbasiertes Betriebssystem für LLMs (Dateisystem-Substrat) | OS-Architektur |
+| [USMC](https://github.com/ellmos-ai/usmc) | Universal Shared Memory Core zur Multi-Agenten-Zustandspersistenz | Gedächtnis-Substrat |
+| [Rinnsal](https://github.com/ellmos-ai/rinnsal) | Leichtgewichtige, strukturierte, eventbasierte Agenten-Infrastruktur | Agenten-Laufzeit |
+| [ellmos-controlcenter-mcp](https://github.com/ellmos-ai/ellmos-controlcenter-mcp) | Zentrale MCP-Tool-Koordination, Profilverwaltung & dynamisches Routing | MCP-Gateway |
+| [ellmos-filecommander-mcp](https://github.com/ellmos-ai/ellmos-filecommander-mcp) | Lokale Dateioperationen, sichere Papierkorb-Löschung & zweisprachiger MCP-Server | MCP-Server |
+| [ellmos-codecommander-mcp](https://github.com/ellmos-ai/ellmos-codecommander-mcp) | AST-Analyse, Code-Transformation & Refactoring-MCP-Server | MCP-Server |
+| [ellmos-clatcher-mcp](https://github.com/ellmos-ai/ellmos-clatcher-mcp) | Strukturierter Scratchpad-, Validierungs- & State-Caching-MCP-Server | MCP-Server |
+| [n8n-manager-mcp](https://github.com/ellmos-ai/n8n-manager-mcp) | Lokale n8n-Workflow-Verwaltung und Workflow-Inspektions-MCP-Server | MCP-Server |
+| [skills](https://github.com/ellmos-ai/skills) | Kuratierter Multi-Agenten-Skill-Katalog und Ausführungsfabric | Skill-Bibliothek |
+| [DevCenter](https://github.com/dev-bricks/DevCenter) | Entwickler-Arbeitsplatz-Orchestrierung und -Verwaltung | Entwickler-Tools |
+| [open-bricks](https://github.com/open-bricks) | Dachorganisation für modulare Open-Source-Bausteine | Ökosystem-Dach |
 
 ## Sicherheitsmodell (bitte lesen)
 

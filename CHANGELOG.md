@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-16 [0.4.0]
+
+- **Discoverability, README-Design, Badges & Metadata Parity**:
+  - Synchronized badges in `README.md` & `README_de.md` across Test Suite (108 passed, 100% green), Version (`0.4.0`), Python (`>=3.10`), License (`MIT`), `ellmos-ai` Ecosystem, `open-bricks` Umbrella, and `llms.txt` Discovery.
+  - Added interactive bilingual Mermaid architecture diagrams detailing the `gardener CLI`/Python API/Search GUI layers, Core Engine (FTS5 BM25 search, Materialize & Run execution engine, federated observe engine with secret redaction and cloud-alert gate), Dual-Database Substrate (`gardener.db` system / `user.db` user space), and federated observe sources (`markdown_dir`, `remember_files`, `sqlite_table`, `agent_transcripts`).
+  - Added complete sibling tools matrix linking `ellmos-ai`, `dev-bricks`, and `open-bricks` ecosystem modules (`ellmos-core`, `clutch`, `BACH`, `USMC`, `Rinnsal`, `ellmos-controlcenter-mcp`, `ellmos-filecommander-mcp`, `ellmos-codecommander-mcp`, `ellmos-clatcher-mcp`, `n8n-manager-mcp`, `skills`, `DevCenter`, `open-bricks`).
+  - Implemented automated metadata and discoverability parity test suite in `tests/test_metadata.py` (5/5 assertions passed).
+  - Updated `llms.txt` Last-checked header to `2026-08-16` and test count to 108 passing tests.
+
 ## 2026-08-13
 
 `find()` can be restricted to one observe-source, so a small source is no
