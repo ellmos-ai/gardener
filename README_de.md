@@ -8,7 +8,7 @@
 [![Version: 0.4.0](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/ellmos-ai/gardener)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests: 108 passed](https://img.shields.io/badge/tests-108%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
+[![Tests: 110 passed](https://img.shields.io/badge/tests-110%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
 [![LLM OS](https://img.shields.io/badge/LLM--OS-SQLite%20Substrate-blueviolet.svg)](https://github.com/ellmos-ai/gardener)
 [![Part of ellmos-ai](https://img.shields.io/badge/ecosystem-ellmos--ai-informational.svg)](https://github.com/ellmos-ai)
 [![open-bricks](https://img.shields.io/badge/umbrella-open--bricks-blue.svg)](https://github.com/open-bricks)
@@ -234,7 +234,7 @@ Vier Quellenarten:
 
 | Art | Was indexiert wird | Wichtige Config |
 |---|---|---|
-| `markdown_dir` | Ein Verzeichnis mit Markdown-Dateien, ein Eintrag pro Datei. `path` darf selbst ein Glob sein, das mehrere Verzeichnisse abdeckt (z. B. eine Pro-Projekt-Memory-Konvention). `patterns` erweitert dies auf andere Dateiarten (z. B. `.txt`-Notizen). `extra_tags` haengt jedem Eintrag statische Tags an, damit ein nachgelagerter Konsument Quellen jenseits des festen `type='observed'` unterscheiden kann (z. B. eine Regeldatei, die als Hinweis eingeblendet werden soll, gegenueber einer rotierenden Registry, die durchsuchbar bleiben, aber nicht eingeblendet werden soll). | `path`, `patterns` (Liste, Default `["*.md"]`), `glob` (einzelnes Muster, veralteter Alias), `extra_tags` (String oder Liste) |
+| `markdown_dir` | Ein Verzeichnis mit Markdown-Dateien, ein Eintrag pro Datei. `path` darf selbst ein Glob sein, das mehrere Verzeichnisse abdeckt (z. B. eine Pro-Projekt-Memory-Konvention). `patterns` erweitert dies auf andere Dateiarten (z. B. `.txt`-Notizen). `exclude_patterns` entfernt Dateinamen wieder aus dem, was `patterns`/`glob` getroffen hat — z. B. ein Hilfetext-Verzeichnis, das eine kanonische Sprache plus mehrere maschinenübersetzte Geschwisterdateien mitbringt (`patterns=["*.txt"]`, `exclude_patterns=["*_en.txt", "*_es.txt"]`), wo `patterns` allein "nicht diese Endung" nicht ausdrücken kann. `extra_tags` haengt jedem Eintrag statische Tags an, damit ein nachgelagerter Konsument Quellen jenseits des festen `type='observed'` unterscheiden kann (z. B. eine Regeldatei, die als Hinweis eingeblendet werden soll, gegenueber einer rotierenden Registry, die durchsuchbar bleiben, aber nicht eingeblendet werden soll). | `path`, `patterns` (Liste, Default `["*.md"]`), `glob` (einzelnes Muster, veralteter Alias), `exclude_patterns` (Liste), `extra_tags` (String oder Liste) |
 | `remember_files` | Kleine Notiz-Dateien irgendwo unterhalb einer Wurzel, gefunden über rekursives Glob. | `path`, `glob` (Default `**/.remember`) |
 | `sqlite_table` | Eine einzelne Tabelle in einer fremden SQLite-Datenbank, streng lesend geöffnet (`mode=ro`). Spaltennamen werden vor Nutzung gegen das echte Schema geprüft (Whitelist). `content` darf mehrere Spalten benennen, die der Reihe nach zusammengefügt werden — eine Zeile, deren Sinn auf zwei Textfelder verteilt ist (das Problem *und* die Lösung einer Lesson), bleibt so vollständig durchsuchbar. | `db_path`, `table`, `columns` (`content` Pflicht, String oder Liste; `id`/`name`/`tags` optional) |
 | `agent_transcripts` | JSONL-Chat-Transkripte, zeilenweise indexiert, **nur Text-Turns** (Tool-Aufrufe/-Ergebnisse und interne „Thinking"-Blöcke werden übersprungen). Bringt eingebaute Feld-Mappings für Claude Code, Gemini Antigravity, Codex und Kimi Transkriptformate mit; jedes andere zeilenbasierte JSON-Transkript lässt sich über ein generisches Dotted-Path-Role/Text-Mapping indexieren. `default_role` deckt Archive mit nur einer Rolle ab, die gar kein Rollenfeld führen — etwa eine reine Prompt-Historie. Große, wachsende Dateien werden ab einem gespeicherten Byte-Offset weitergelesen — ein Refresh liest nie erneut, was schon indexiert wurde. `path` darf eine **Liste** von Globs sein, und `key_by="name"` schlüsselt den Offset-Zustand am Dateinamen statt am vollen Pfad — zusammen deckt das Hosts ab, die Transkripte zwischen Ordnern *rotieren* (Codex verschiebt fertige Rollouts von `sessions/` nach `archived_sessions/`), was sonst jede verschobene Datei ein zweites Mal unter neuem Namen indexieren würde. | `path` (Glob oder Liste von Globs, `**` rekursiv), `format` (`claude_code` Default, `gemini_antigravity`, `codex`, `kimi`, oder `generic` mit `role_field`/`text_field`/`default_role`), `key_by` (`path` Default, oder `name`) |
@@ -315,6 +315,47 @@ af.observe_source_add("gemini-archive", "agent_transcripts",
                        path="~/.gemini/antigravity/conversations_archive/*.zip",
                        format="gemini_antigravity",
                        zip_inner="*/.system_generated/logs/transcript.jsonl")
+```
+
+### Die eigene Wissensbasis eines fremden Systems indexieren
+
+Ein lokales "OS-in-a-box"-System führt seine Dokumentation meist auf
+zwei Wegen gleichzeitig: strukturierte Zeilen in seiner eigenen
+SQLite-Datenbank (Wiki-Artikel, Skill-Definitionen) und einfache
+Dateien auf der Platte (README/Architektur-Dokus, ein generiertes
+Pro-Befehl-Hilfeverzeichnis). Beides wird `observed`, nicht absorbiert
+— Gardener fasst weder die Dateien noch die DB des fremden Systems an:
+
+```python
+# Zwei Tabellen der eigenen Wissensbasis des fremden Systems
+af.observe_source_add("bach-wiki", "sqlite_table",
+                       db_path="~/.bach/bach.db", table="wiki_articles",
+                       columns={"id": "path", "name": "title",
+                                "content": "content", "tags": "category"})
+af.observe_source_add("bach-skills", "sqlite_table",
+                       db_path="~/.bach/bach.db", table="skills",
+                       columns={"id": "id", "name": "name",
+                                "content": ["description", "content"],
+                                "tags": "category"})
+
+# README-/Architektur-artige Dokus unter festen, benannten Pfaden --
+# nicht-rekursive `patterns` halten einen docs/-Unterordner
+# (z. B. docs/help/) von selbst draussen, ohne extra Ausschluss
+af.observe_source_add("bach-system-docs", "markdown_dir",
+                       path="~/OneDrive/.../BACH/system",
+                       patterns=["ARCHITECTURE.md", "CHANGELOG.md",
+                                 "FEATURES.md", "ROADMAP.md"])
+
+# Ein generiertes Pro-Befehl-Hilfeverzeichnis, das pro Schluessel eine
+# kanonische Sprache plus fuenf maschinenuebersetzte Geschwister
+# mitbringt -- jede Sprache zu indexieren wuerde das FTS-Ranking mit
+# Beinahe-Duplikaten fluten, fuer wenig Mehrwert, also bleibt nur die
+# kanonische Sprache erhalten
+af.observe_source_add("bach-help-de", "markdown_dir",
+                       path="~/OneDrive/.../BACH/system/docs/help",
+                       patterns=["*.txt"],
+                       exclude_patterns=["*_en.txt", "*_es.txt",
+                                         "*_ja.txt", "*_ru.txt", "*_zh.txt"])
 ```
 
 ### Eine Quelle suchen statt alle

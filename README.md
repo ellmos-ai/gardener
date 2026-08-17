@@ -10,7 +10,7 @@
 [![Version: 0.4.0](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/ellmos-ai/gardener)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests: 108 passed](https://img.shields.io/badge/tests-108%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
+[![Tests: 110 passed](https://img.shields.io/badge/tests-110%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
 [![LLM OS](https://img.shields.io/badge/LLM--OS-SQLite%20Substrate-blueviolet.svg)](https://github.com/ellmos-ai/gardener)
 [![Part of ellmos-ai](https://img.shields.io/badge/ecosystem-ellmos--ai-informational.svg)](https://github.com/ellmos-ai)
 [![open-bricks](https://img.shields.io/badge/umbrella-open--bricks-blue.svg)](https://github.com/open-bricks)
@@ -233,7 +233,7 @@ Four source kinds:
 
 | Kind | What it indexes | Key config |
 |------|------------------|------------|
-| `markdown_dir` | A directory of markdown files, one entry per file. The `path` may itself be a glob spanning several directories (e.g. a per-project memory convention). `patterns` widens this to other file kinds (e.g. `.txt` notes). `extra_tags` appends static tags to every item, so a downstream consumer can tell sources apart beyond the fixed `type='observed'` (e.g. a rule file worth surfacing as a hint vs. a rotating registry that should stay searchable but not surfaced). | `path`, `patterns` (list, default `["*.md"]`), `glob` (single-pattern legacy alias), `extra_tags` (string or list) |
+| `markdown_dir` | A directory of markdown files, one entry per file. The `path` may itself be a glob spanning several directories (e.g. a per-project memory convention). `patterns` widens this to other file kinds (e.g. `.txt` notes). `exclude_patterns` drops filenames matching a pattern back out of what `patterns`/`glob` matched — e.g. a help-text directory that ships one canonical language plus several machine-translated siblings (`patterns=["*.txt"]`, `exclude_patterns=["*_en.txt", "*_es.txt"]`), where `patterns` alone cannot express "not this suffix". `extra_tags` appends static tags to every item, so a downstream consumer can tell sources apart beyond the fixed `type='observed'` (e.g. a rule file worth surfacing as a hint vs. a rotating registry that should stay searchable but not surfaced). | `path`, `patterns` (list, default `["*.md"]`), `glob` (single-pattern legacy alias), `exclude_patterns` (list), `extra_tags` (string or list) |
 | `remember_files` | Small note files anywhere below a root, found via a recursive glob. | `path`, `glob` (default `**/.remember`) |
 | `sqlite_table` | A single table in a foreign SQLite database, opened strictly read-only (`mode=ro`). Column names are whitelisted against the live schema before use. `content` may name several columns, joined in order — a row whose meaning is split across two text fields (a lesson's problem *and* its solution) stays fully searchable. | `db_path`, `table`, `columns` (`content` required, string or list; `id`/`name`/`tags` optional) |
 | `agent_transcripts` | JSONL chat transcripts, indexed line by line, **text turns only** (tool calls/results and internal "thinking" blocks are skipped). Ships built-in field mappings for Claude Code, Gemini Antigravity, Codex, and Kimi transcript formats; any other line-based JSON transcript can be indexed via a generic dotted-path role/text mapping. `default_role` covers single-role archives that carry no role field at all, such as a bare prompt history. Large, growing files are tailed from a saved byte offset — a refresh never re-reads what it already indexed. `path` may be a **list** of globs, and `key_by="name"` keys the offset state on the filename instead of the full path — together they cover hosts that *rotate* transcripts between directories (Codex moves finished rollouts from `sessions/` to `archived_sessions/`), which would otherwise re-index every moved file under a second name. | `path` (glob or list of globs, `**` recurses), `format` (`claude_code` default, `gemini_antigravity`, `codex`, `kimi`, or `generic` with `role_field`/`text_field`/`default_role`), `key_by` (`path` default, or `name`) |
@@ -313,6 +313,45 @@ af.observe_source_add("usmc-lessons", "sqlite_table",
                        columns={"id": "id", "name": "title",
                                 "content": ["problem", "solution"],
                                 "tags": "category"})
+```
+
+### Indexing a foreign system's own knowledge base
+
+A local "OS-in-a-box" system typically keeps its documentation two ways
+at once: structured rows in its own SQLite database (wiki articles,
+skill definitions) and plain files on disk (README/architecture docs,
+a generated per-command help directory). Both are `observed`, not
+absorbed — Gardener never touches the foreign system's files or DB:
+
+```python
+# Two tables of the foreign system's own knowledge base
+af.observe_source_add("bach-wiki", "sqlite_table",
+                       db_path="~/.bach/bach.db", table="wiki_articles",
+                       columns={"id": "path", "name": "title",
+                                "content": "content", "tags": "category"})
+af.observe_source_add("bach-skills", "sqlite_table",
+                       db_path="~/.bach/bach.db", table="skills",
+                       columns={"id": "id", "name": "name",
+                                "content": ["description", "content"],
+                                "tags": "category"})
+
+# README/architecture-style docs at fixed, named paths -- non-recursive
+# `patterns` naturally keeps a docs/ subfolder (e.g. docs/help/) out
+# without an extra exclude
+af.observe_source_add("bach-system-docs", "markdown_dir",
+                       path="~/OneDrive/.../BACH/system",
+                       patterns=["ARCHITECTURE.md", "CHANGELOG.md",
+                                 "FEATURES.md", "ROADMAP.md"])
+
+# A generated per-command help directory that ships one canonical
+# language plus five machine-translated siblings per key -- indexing
+# every language would flood FTS ranking with near-duplicates for
+# little marginal value, so only the canonical language is kept
+af.observe_source_add("bach-help-de", "markdown_dir",
+                       path="~/OneDrive/.../BACH/system/docs/help",
+                       patterns=["*.txt"],
+                       exclude_patterns=["*_en.txt", "*_es.txt",
+                                         "*_ja.txt", "*_ru.txt", "*_zh.txt"])
 ```
 
 ### Searching one source instead of all of them

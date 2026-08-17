@@ -226,6 +226,40 @@ class TestMarkdownDirPatterns(ObserveSourceTestCase):
         self.af.observe_sources("mem")
         self.assertEqual(self.af.find("Unveraenderte Notiz")[0]["tags"], "markdown_dir,mem")
 
+    def test_exclude_patterns_drop_machine_translated_siblings(self):
+        # Mirrors a BACH-style help directory: one canonical-language file
+        # plus several machine-translated siblings sharing the same stem.
+        # `patterns` alone cannot say "*.txt but not *_en.txt" (fnmatch's
+        # `[!seq]` only excludes a single character), so exclude_patterns
+        # is matched separately, after patterns/glob.
+        help_dir = self.foreign / "help"
+        help_dir.mkdir(parents=True, exist_ok=True)
+        (help_dir / "agent.txt").write_text("Kanonische deutsche Hilfe.", encoding="utf-8")
+        (help_dir / "agent_en.txt").write_text("English translated help.", encoding="utf-8")
+        (help_dir / "agent_es.txt").write_text("Ayuda traducida.", encoding="utf-8")
+
+        self.af.observe_source_add(
+            "help-de", "markdown_dir", path=str(help_dir), patterns=["*.txt"],
+            exclude_patterns=["*_en.txt", "*_es.txt"])
+        result = self.af.observe_sources("help-de")
+        self.assertEqual(result["help-de"]["indexed"], 1)
+
+        self.assertEqual(len(self.af.find("Kanonische deutsche")), 1)
+        self.assertEqual(self.af.find("English translated"), [])
+        self.assertEqual(self.af.find("Ayuda traducida"), [])
+
+    def test_no_exclude_patterns_leaves_matching_unchanged(self):
+        # Backward compatibility: omitting exclude_patterns must not
+        # filter anything that `patterns`/`glob` already matched.
+        mem_dir = self.foreign / "memory"
+        mem_dir.mkdir(parents=True, exist_ok=True)
+        (mem_dir / "notes.md").write_text("Ohne Ausschluss.", encoding="utf-8")
+
+        self.af.observe_source_add("mem", "markdown_dir", path=str(mem_dir))
+        result = self.af.observe_sources("mem")
+        self.assertEqual(result["mem"]["indexed"], 1)
+        self.assertEqual(len(self.af.find("Ohne Ausschluss")), 1)
+
 
 class TestRememberFilesSource(ObserveSourceTestCase):
     def test_recursive_glob_finds_nested_remember_files(self):

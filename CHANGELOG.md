@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-08-17
+
+`markdown_dir` gained `exclude_patterns`, and BACH's own knowledge base is
+now observed alongside its existing `bach-facts`/`bach-lessons`/`bach-working`
+memory-table sources.
+
+- **`exclude_patterns` on `markdown_dir`/`remember_files`** drops filenames
+  matching an fnmatch pattern back out of what `patterns`/`glob` already
+  matched -- e.g. a generated help directory that ships one canonical
+  language plus several machine-translated siblings per key, where
+  `patterns` alone cannot express "*.txt but not *_en.txt" (fnmatch's
+  `[!seq]` only excludes a single character, not a suffix).
+- **Six new BACH observe-sources**: `bach-wiki` and `bach-skills`
+  (`sqlite_table` against `wiki_articles`/`skills` in `~/.bach/bach.db`,
+  read-only), `bach-root-docs`/`bach-system-docs`/`bach-docs`
+  (`markdown_dir` over BACH's README/architecture/changelog/roadmap files),
+  and `bach-help-de` (BACH's generated per-command help directory, German
+  only via the new `exclude_patterns`). BACH itself is never written to.
+
 ## 2026-08-16 [0.4.0]
 
 - **Discoverability, README-Design, Badges & Metadata Parity**:

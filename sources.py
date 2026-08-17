@@ -335,6 +335,12 @@ def _iter_text_files(source_id: str, config: Dict, default_patterns,
               surfaced as a hint) versus a rotating registry source
               'register-log' (findable, but a consumer may choose to
               exclude it from what gets surfaced).
+        exclude_patterns: optional list of filename patterns (fnmatch,
+              matched against the bare filename) to drop from what
+              `patterns`/`glob` matched -- e.g. a canonical-language
+              help-text directory that also holds machine-translated
+              siblings: `patterns=["*.txt"]`,
+              `exclude_patterns=["*_en.txt", "*_es.txt"]`.
     """
     base_patterns = _config_patterns(config)
     if not base_patterns:
@@ -345,6 +351,14 @@ def _iter_text_files(source_id: str, config: Dict, default_patterns,
         file_patterns = [config["glob"]]
     else:
         file_patterns = list(default_patterns)
+
+    # Filename patterns (fnmatch against the bare filename, not the full
+    # path) to drop from an otherwise-matching set -- e.g. a help-text
+    # directory that ships one canonical language plus several
+    # machine-translated siblings ('agent.txt' vs 'agent_en.txt'), where
+    # `patterns` alone cannot express "*.txt but not *_en.txt" (glob's
+    # `[!seq]` only excludes a single character, not a suffix).
+    exclude_patterns = list(config.get("exclude_patterns") or [])
 
     # glob.glob() on a plain, non-wildcard, existing path simply returns
     # that path -- so this one call covers both a literal directory and
@@ -370,6 +384,10 @@ def _iter_text_files(source_id: str, config: Dict, default_patterns,
             matched_files.update(p for p in bp.glob(file_glob) if p.is_file())
         for file_path in sorted(matched_files):
             if is_excluded(file_path):
+                continue
+            if exclude_patterns and any(
+                fnmatch.fnmatch(file_path.name, pat) for pat in exclude_patterns
+            ):
                 continue
             try:
                 stat = file_path.stat()
