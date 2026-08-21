@@ -8,7 +8,7 @@
 [![Version: 0.4.0](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/ellmos-ai/gardener)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests: 110 passed](https://img.shields.io/badge/tests-110%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
+[![Tests: 116 passed](https://img.shields.io/badge/tests-116%20passed-brightgreen.svg)](https://github.com/ellmos-ai/gardener)
 [![LLM OS](https://img.shields.io/badge/LLM--OS-SQLite%20Substrate-blueviolet.svg)](https://github.com/ellmos-ai/gardener)
 [![Part of ellmos-ai](https://img.shields.io/badge/ecosystem-ellmos--ai-informational.svg)](https://github.com/ellmos-ai)
 [![open-bricks](https://img.shields.io/badge/umbrella-open--bricks-blue.svg)](https://github.com/open-bricks)

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-08-21
+
+- **Seeded API Reference & Documentation Completeness**:
+  - Expanded `gardener-api` system knowledge entry in `seed.py` to cover all core Python methods (`find`, `recall`, `get`, `put`, `delete`, `list`, `run`, `memo`, `lesson`, `session_end`, `consolidate`, `task`, `tasks`, `done`, `task_status`, `absorb`, `materialize`, `observe`, `sync`, `status`, `observe_source_*`, `observe_sources`), CLI commands, and all 10 entry types with authentic German umlauts.
+  - Added unit test `test_seeded_api_reference_covers_all_core_capabilities` to verify `gardener-api` in `gardener.db` comprehensively references all core methods and CLI interfaces.
+- **CI Modernization & Python 3.13 Matrix**:
+  - Modernized GitHub Actions workflow (`.github/workflows/tests.yml`) to test across Python 3.10, 3.11, 3.12, and 3.13.
+  - Included `search_gui.py` in CI `compileall` check.
+  - Upgraded GitHub Actions steps to `actions/checkout@v4` and `actions/setup-python@v5`.
+- **Metadata Parity & Test Suite**:
+  - Test suite grew to 116 passing tests (100% green).
+  - Synchronized badges and documentation in `README.md`, `README_de.md`, `llms.txt`, and `tests/test_metadata.py`.
+
 ## 2026-08-17
 
 `markdown_dir` gained `exclude_patterns`, and BACH's own knowledge base is

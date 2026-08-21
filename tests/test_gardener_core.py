@@ -278,6 +278,34 @@ class TestGardenerCore(GardenerTempCase):
         for spelling in legacy_spellings:
             self.assertNotIn(spelling, text)
 
+    def test_seeded_api_reference_covers_all_core_capabilities(self):
+        import seed
+
+        seed = importlib.reload(seed)
+        with contextlib.redirect_stdout(io.StringIO()):
+            seed.seed()
+
+        api_doc = self.af.get("gardener-api")
+        self.assertIsNotNone(api_doc)
+        content = api_doc["content"]
+
+        for method in (
+            "find(", "recall(", "get(", "put(", "delete(", "list(", "run(",
+            "memo(", "lesson(", "session_end(", "consolidate(",
+            "task(", "tasks(", "done(", "task_status(",
+            "absorb(", "materialize(", "observe(", "sync(", "status(",
+            "observe_source_add(", "observe_source_list(", "observe_source_refresh(", "observe_sources(", "observe_source_remove("
+        ):
+            self.assertIn(method, content)
+
+        for cli_cmd in (
+            "find", "recall", "memo", "lesson", "session-end", "consolidate",
+            "get", "put", "delete", "list", "run",
+            "absorb", "materialize", "observe", "sync", "status",
+            "task", "tasks", "done", "observe-source", "gui"
+        ):
+            self.assertIn(f"python gardener.py {cli_cmd}", content)
+
 
 class TestCliI18n(unittest.TestCase):
     def run_help(self, lang):

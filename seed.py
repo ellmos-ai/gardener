@@ -49,42 +49,82 @@ def seed():
 from gardener import Gardener
 af = Gardener()
 
-# Suchen
+# Suchen (find & recall)
 results = af.find("steuer")
 results = af.find("scanner", type="tool")
+results = af.find("notiz", source="claude-transcripts")
+memories = af.recall("entscheidung")
 
-# Lesen
+# Lesen, Schreiben & Verwalten
 entry = af.get("beleg-scanner")
-
-# Schreiben
 af.put("notiz", content="Wichtig!", type="memory", tags="todo")
 af.put("mein-tool", content="...", type="tool", target="system")
+af.delete("alte-notiz")
+items = af.list(type="tool", limit=50)
 
 # Ausführen
 ok, output = af.run("mein-tool", input={"key": "value"})
 
-# Transporter
-af.absorb("/pfad/zur/datei.pdf")       # Datei → DB
-af.materialize("datei.pdf")             # DB → Datei
+# Gedächtnis (Memory)
+af.memo("Projektstart am Montag", tags="projekt,start")
+af.lesson("Immer atomare Upserts nutzen", rule="Verhindert Race-Conditions")
+af.session_end("Meilenstein 1 erreicht", open_questions="Rechnungsversand prüfen")
+af.consolidate()                         # Veraltetes verblassen / vergessen
 
-# Beobachten
-af.observe()                            # Ordner scannen
+# Aufgaben (Tasks)
+af.task("steuer-2026", "Belege sammeln", priority="high")
+tasks = af.tasks(status="open")
+af.done("steuer-2026", notes="Alle Belege erfasst")
+af.task_status("steuer-2026", "in_progress")
 
-# Status
-af.status()                             # System-Info
+# Transporter & Synchronisation
+af.absorb("/pfad/zur/datei.pdf")         # Datei → DB (kuratiert)
+af.materialize("datei.pdf")              # DB → Datei
+af.observe()                             # Ordner scannen
+af.sync()                                # Synchronisation gemäß config.json
+af.status()                              # System-Info
+
+# Föderierter Cross-Source-Index
+af.observe_source_add("claude", "agent_transcripts", path="~/.claude/projects")
+sources = af.observe_source_list()
+af.observe_source_refresh("claude")
+af.observe_sources()                     # Alle Quellen inkrementell aktualisieren
+af.observe_source_remove("claude")
 ```
 
 ## CLI
 
 ```bash
-python gardener.py find <query>
+# Suchen & Gedächtnis
+python gardener.py find <query> [--type T] [--source S] [--limit N]
+python gardener.py recall <query> [--limit N]
+python gardener.py memo <text> [--tags TAGS]
+python gardener.py lesson <summary> [--rule RULE]
+python gardener.py session-end <summary> [--open Q]
+python gardener.py consolidate
+
+# Lesen, Schreiben & Verwalten
 python gardener.py get <name>
-python gardener.py put <name> <text>
-python gardener.py run <name>
+python gardener.py put <name> <text> [--type T] [--tags TAGS] [--system]
+python gardener.py delete <name>
+python gardener.py list [--type T] [--limit N]
+python gardener.py run <name> [--input JSON]
+
+# Transporter & System
 python gardener.py absorb <datei>
-python gardener.py materialize <name>
-python gardener.py observe
+python gardener.py materialize <name> [--path PATH]
+python gardener.py observe [--path DIR]
+python gardener.py sync
 python gardener.py status
+
+# Aufgaben
+python gardener.py task <name> <title> [--priority P]
+python gardener.py tasks [--status S]
+python gardener.py done <name> [--notes NOTES]
+
+# Föderierter Index & GUI
+python gardener.py observe-source <add|list|remove|refresh> ...
+python gardener.py gui [--host H] [--port P] [--no-browser]
 ```
 
 ## Typen
@@ -94,9 +134,11 @@ python gardener.py status
 | knowledge | Wissen, Doku, Regeln | gardener.db |
 | tool | Ausführbarer Code | gardener.db |
 | memory | Erinnerungen, Notizen | user.db |
-| task | Aufgaben | user.db |
+| lesson | Gelernte Lektionen, Regeln | user.db |
+| session | Sitzungszusammenfassungen | user.db |
+| task | Aufgaben mit Priorität | user.db |
 | document | Absorbierte Dateien | user.db |
-| observed | Beobachtete Dateien | user.db |
+| observed | Beobachtete Dateien / Quellen | user.db |
 | config | Konfiguration | user.db |
 | export | Zur Materialisierung markiert | user.db |
 """)
