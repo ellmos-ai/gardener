@@ -1,0 +1,486 @@
+{
+  "schema": "gardener.sources.reference.v1",
+  "generated": "2026-08-23",
+  "generated_on": "ASUS-GEI",
+  "note": "Referenz-Set fuer observe-sources. Ebene 'base' ist agentenneutral und auf jedem System sinnvoll; 'system' braucht die ellmos-Infrastruktur; 'user' ist nutzerspezifisch. Anwenden mit Existenzpruefung -- was nicht da ist, wird uebersprungen, nicht als Fehler gemeldet. Jede Quelle bleibt lokal abschaltbar (observe_source_remove) und erweiterbar (observe_source_add).",
+  "tiers": {
+    "base": {
+      "claude-commands": {
+        "kind": "markdown_dir",
+        "path": "~/.claude/commands"
+      },
+      "claude-memories": {
+        "kind": "markdown_dir",
+        "path": "~/.claude/projects/*/memory"
+      },
+      "claude-skills": {
+        "kind": "markdown_dir",
+        "path": "~/.claude/skills/*"
+      },
+      "claude-transcripts": {
+        "kind": "agent_transcripts",
+        "path": "~/.claude/projects/*/**/*.jsonl"
+      },
+      "codex-history": {
+        "kind": "agent_transcripts",
+        "path": "~/.codex/history.jsonl",
+        "format": "codex"
+      },
+      "codex-memories": {
+        "kind": "markdown_dir",
+        "path": "~/.codex/memories"
+      },
+      "codex-rollouts": {
+        "kind": "markdown_dir",
+        "path": "~/.codex/memories/rollout_summaries"
+      },
+      "codex-rules": {
+        "kind": "markdown_dir",
+        "path": "~/.codex",
+        "patterns": [
+          "GPT.md"
+        ]
+      },
+      "codex-sessions": {
+        "kind": "agent_transcripts",
+        "path": [
+          "~/.codex/sessions/**/*.jsonl",
+          "~/.codex/archived_sessions/*.jsonl"
+        ],
+        "format": "codex",
+        "key_by": "name"
+      },
+      "gemini-antigravity": {
+        "kind": "markdown_dir",
+        "path": "~/.gemini/antigravity",
+        "patterns": [
+          "ANTIGRAVITY-REGISTRY.md",
+          "AUTOMATIONS-MEMORY.md",
+          "ANTIGRAVITY-LOG.txt"
+        ]
+      },
+      "gemini-archive": {
+        "kind": "agent_transcripts",
+        "path": "~/.gemini/antigravity/conversations_archive/*.zip",
+        "format": "gemini_antigravity",
+        "zip_inner": "*/.system_generated/logs/transcript.jsonl"
+      },
+      "gemini-automations": {
+        "kind": "markdown_dir",
+        "path": "~/.gemini/antigravity/automations/*",
+        "patterns": [
+          "automation.toml"
+        ]
+      },
+      "gemini-rules": {
+        "kind": "markdown_dir",
+        "path": "~/.gemini",
+        "patterns": [
+          "GEMINI.md",
+          "AUTOMATIONS-MEMORY.md",
+          "memory.md",
+          "memory.txt"
+        ]
+      },
+      "gemini-transcripts": {
+        "kind": "agent_transcripts",
+        "path": "~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl",
+        "format": "gemini_antigravity"
+      },
+      "kimi-prompts": {
+        "kind": "agent_transcripts",
+        "path": "~/.kimi-code/user-history/*.jsonl",
+        "format": "generic",
+        "text_field": "content",
+        "default_role": "user"
+      },
+      "kimi-transcripts": {
+        "kind": "agent_transcripts",
+        "path": "~/.kimi-code/sessions/*/*/agents/*/wire.jsonl",
+        "format": "kimi"
+      },
+      "repo-llms-txt": {
+        "kind": "markdown_dir",
+        "path": "C:/_Local_DEV/repos/*",
+        "patterns": [
+          "llms.txt"
+        ],
+        "extra_tags": [
+          "llms-txt",
+          "repo-docs"
+        ]
+      },
+      "skills-library": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/.AI/.SKILLS/skills/*/*"
+      }
+    },
+    "system": {
+      "control-tickets": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/_control-center/_TICKETS/*",
+        "patterns": [
+          "*.txt",
+          "*.md"
+        ],
+        "extra_tags": [
+          "ticket"
+        ]
+      },
+      "decisions-archive": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/_control-center/_DECISIONS/*",
+        "patterns": [
+          "*.md",
+          "*.txt"
+        ]
+      },
+      "decisions-ledger": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/_control-center/_DECISIONS"
+      },
+      "decisions-open": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/_control-center/_DECISIONS",
+        "patterns": [
+          "*.txt"
+        ]
+      },
+      "memoryhooker-docs": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/.AI/.MODULES/.CONTROL/memory-hooker"
+      },
+      "policy-adoption": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.SYNC/_policies/adoption",
+        "patterns": [
+          "*.json"
+        ],
+        "extra_tags": [
+          "policy"
+        ]
+      },
+      "policy-library": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.SYNC/_policies/library",
+        "extra_tags": [
+          "policy"
+        ]
+      },
+      "taskplan-tasks": {
+        "kind": "sqlite_table",
+        "db_path": "~/.taskplan/taskplan.db",
+        "table": "rinnsal_tasks",
+        "columns": {
+          "content": "description",
+          "name": "title",
+          "id": "id",
+          "tags": "tags"
+        }
+      },
+      "usmc-facts": {
+        "kind": "sqlite_table",
+        "db_path": "~/.usmc/usmc_memory.db",
+        "table": "usmc_facts",
+        "columns": {
+          "id": "id",
+          "name": "key",
+          "content": "value",
+          "tags": "category"
+        }
+      },
+      "usmc-lessons": {
+        "kind": "sqlite_table",
+        "db_path": "~/.usmc/usmc_memory.db",
+        "table": "usmc_lessons",
+        "columns": {
+          "id": "id",
+          "name": "title",
+          "content": [
+            "problem",
+            "solution"
+          ],
+          "tags": "category"
+        }
+      },
+      "usmc-sessions": {
+        "kind": "sqlite_table",
+        "db_path": "~/.usmc/usmc_memory.db",
+        "table": "usmc_sessions",
+        "columns": {
+          "id": "id",
+          "name": "current_task",
+          "content": "handoff_notes"
+        }
+      },
+      "usmc-working": {
+        "kind": "sqlite_table",
+        "db_path": "~/.usmc/usmc_memory.db",
+        "table": "usmc_working",
+        "columns": {
+          "id": "id",
+          "content": "content",
+          "tags": "tags"
+        }
+      }
+    },
+    "user": {
+      "bach-docs": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/.AI/.OS/BACH/system/docs",
+        "patterns": [
+          "*.md"
+        ]
+      },
+      "bach-facts": {
+        "kind": "sqlite_table",
+        "db_path": "~/.bach/bach.db",
+        "table": "memory_facts",
+        "columns": {
+          "content": "value",
+          "name": "key",
+          "id": "id",
+          "tags": "category"
+        }
+      },
+      "bach-help-de": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/.AI/.OS/BACH/system/docs/help",
+        "patterns": [
+          "*.txt"
+        ],
+        "exclude_patterns": [
+          "*_en.txt",
+          "*_es.txt",
+          "*_ja.txt",
+          "*_ru.txt",
+          "*_zh.txt"
+        ]
+      },
+      "bach-lessons": {
+        "kind": "sqlite_table",
+        "db_path": "~/.bach/bach.db",
+        "table": "memory_lessons",
+        "columns": {
+          "content": [
+            "problem",
+            "solution"
+          ],
+          "name": "title",
+          "id": "id",
+          "tags": "trigger_words"
+        }
+      },
+      "bach-root-docs": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/.AI/.OS/BACH",
+        "patterns": [
+          "AGENTS.md",
+          "BACH_USER_MANUAL.md",
+          "BACH_USER_MANUAL.en.md"
+        ]
+      },
+      "bach-skills": {
+        "kind": "sqlite_table",
+        "db_path": "~/.bach/bach.db",
+        "table": "skills",
+        "columns": {
+          "id": "id",
+          "name": "name",
+          "content": [
+            "description",
+            "content"
+          ],
+          "tags": "category"
+        }
+      },
+      "bach-system-docs": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/.AI/.OS/BACH/system",
+        "patterns": [
+          "ARCHITECTURE.md",
+          "CHANGELOG.md",
+          "FEATURES.md",
+          "ROADMAP.md"
+        ]
+      },
+      "bach-wiki": {
+        "kind": "sqlite_table",
+        "db_path": "~/.bach/bach.db",
+        "table": "wiki_articles",
+        "columns": {
+          "id": "path",
+          "name": "title",
+          "content": "content",
+          "tags": "category"
+        }
+      },
+      "bach-working": {
+        "kind": "sqlite_table",
+        "db_path": "~/.bach/bach.db",
+        "table": "memory_working",
+        "columns": {
+          "content": "content",
+          "id": "id"
+        }
+      },
+      "pipeline-docs-ai": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/.AI",
+        "patterns": [
+          "CLAUDE.md",
+          "README.md",
+          "MASTER-REGISTRY.md",
+          "POLICY-REG.md",
+          "STATUS_UEBERSICHT*.md"
+        ],
+        "extra_tags": [
+          "pipeline-doc"
+        ]
+      },
+      "pipeline-docs-research": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/.RESEARCH",
+        "patterns": [
+          "CLAUDE.md",
+          "README.md",
+          "MASTER-REGISTRY.md",
+          "POLICY-REG.md",
+          "STATUS_UEBERSICHT*.md"
+        ],
+        "extra_tags": [
+          "pipeline-doc"
+        ]
+      },
+      "pipeline-docs-roblox": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/.ROBLOX",
+        "patterns": [
+          "CLAUDE.md",
+          "README.md",
+          "MASTER-REGISTRY.md",
+          "POLICY-REG.md",
+          "STATUS_UEBERSICHT*.md"
+        ],
+        "extra_tags": [
+          "pipeline-doc"
+        ]
+      },
+      "pipeline-docs-software": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/.SOFTWARE",
+        "patterns": [
+          "CLAUDE.md",
+          "README.md",
+          "MASTER-REGISTRY.md",
+          "POLICY-REG.md",
+          "STATUS_UEBERSICHT*.md"
+        ],
+        "extra_tags": [
+          "pipeline-doc"
+        ]
+      },
+      "pipeline-docs-topics": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS",
+        "patterns": [
+          "CLAUDE.md",
+          "README.md",
+          "MASTER-REGISTRY.md",
+          "POLICY-REG.md",
+          "STATUS_UEBERSICHT*.md"
+        ],
+        "extra_tags": [
+          "pipeline-doc"
+        ]
+      },
+      "pipeline-docs-umbruch": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/.UMBRUCH",
+        "patterns": [
+          "CLAUDE.md",
+          "README.md",
+          "MASTER-REGISTRY.md",
+          "POLICY-REG.md",
+          "STATUS_UEBERSICHT*.md"
+        ],
+        "extra_tags": [
+          "pipeline-doc"
+        ]
+      },
+      "register-log-ai": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/.AI",
+        "patterns": [
+          "CHECKS-REG.md"
+        ],
+        "extra_tags": [
+          "register-log"
+        ]
+      },
+      "register-log-research": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/.RESEARCH",
+        "patterns": [
+          "CHECKS-REG.md"
+        ],
+        "extra_tags": [
+          "register-log"
+        ]
+      },
+      "register-log-roblox": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/.ROBLOX",
+        "patterns": [
+          "CHECKS-REG.md"
+        ],
+        "extra_tags": [
+          "register-log"
+        ]
+      },
+      "register-log-software": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/.SOFTWARE",
+        "patterns": [
+          "CHECKS-REG.md"
+        ],
+        "extra_tags": [
+          "register-log"
+        ]
+      },
+      "tom-lm-avatar": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/_control-center/_TOM-lm/avatar"
+      },
+      "tom-lm-logs": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/_control-center/_TOM-lm/avatar",
+        "patterns": [
+          "*.txt"
+        ]
+      },
+      "tom-lm-root": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/_control-center/_TOM-lm"
+      },
+      "user-wiki": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.WIKI",
+        "patterns": [
+          "**/*.txt"
+        ]
+      },
+      "wissen-summaries": {
+        "kind": "sqlite_table",
+        "db_path": "C:/_Local_DEV/DATA_STORE/wissensdb.db",
+        "table": "summaries",
+        "columns": {
+          "id": "id",
+          "name": "domain",
+          "content": "summary",
+          "tags": "keywords"
+        }
+      }
+    }
+  }
+}
