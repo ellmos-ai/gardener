@@ -1,6 +1,6 @@
-import importlib
 import contextlib
 import gc
+import importlib
 import io
 import os
 import re
@@ -12,7 +12,6 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 

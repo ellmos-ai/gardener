@@ -1,5 +1,5 @@
-import importlib
 import gc
+import importlib
 import json
 import os
 import shutil
@@ -10,7 +10,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 

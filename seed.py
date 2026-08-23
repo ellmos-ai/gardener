@@ -460,7 +460,7 @@ Gardener ist dein LLM-natives Betriebssystem.
 
     # Ergebnis
     status = af.status()
-    print(f"Seed abgeschlossen:")
+    print("Seed abgeschlossen:")
     print(f"  System-DB: {status['system_entries']} Einträge")
     print(f"  User-DB:   {status['user_entries']} Einträge")
 

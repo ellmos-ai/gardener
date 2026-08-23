@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-08-23 [0.4.1]
+
+- **Multi-OS GitHub Actions CI Matrix (`.github/workflows/ci.yml`)**:
+  - Implemented multi-OS testing matrix across `ubuntu-latest`, `windows-latest`, and `macos-latest` on Python versions `3.10`, `3.11`, `3.12`, and `3.13`.
+  - Added automated `actions/checkout@v4`, `actions/setup-python@v5` with pip caching, Ruff linting gate (`ruff check .`), byte-compilation verification (`compileall`), and `pytest` execution.
+- **Bilingual Security Policy (`SECURITY.md`)**:
+  - Authored comprehensive English & German security policy defining Local-First & Zero-Egress SQLite substrate guarantees, secret redaction & token masking invariants in `sources.py`, unprivileged User-Mode (Non-Elevation), and coordinated vulnerability disclosure channels (`security@ellmos.ai`, `support@lukasgeiger.com`, `lukas@open-bricks.org`).
+- **PEP 621 Standard Classifiers, URLs & Ruff Lint Config (`pyproject.toml`)**:
+  - Added standardized PEP 621 metadata classifiers (`Development Status :: 4 - Beta`, `OS Independent`, `POSIX :: Linux`, `Microsoft :: Windows`, `MacOS`, Python 3.10-3.13).
+  - Configured complete `[project.urls]` (`Homepage`, `Documentation`, `Repository`, `Issues`, `Changelog`, `Security`, `Umbrella`) and `[tool.ruff]` linting rules.
+- **Code Hygiene & Ruff Lint Cleanup**:
+  - Removed unused imports and extraneous f-string prefixes in `gardener.py` and `seed.py`.
+  - Renamed ambiguous iteration variables (`l` -> `like_param`) in FTS/LIKE multi-word queries.
+- **Metadata Contract Test Expansion (`tests/test_metadata.py`)**:
+  - Expanded contract test suite with 8 rigorous assertions verifying multi-OS CI workflow integrity, bilingual security policy, PEP 621 metadata, version parity (`0.4.1`), and discovery consistency (119/119 tests passing).
+
 ## 2026-08-21
 
 - **Seeded API Reference & Documentation Completeness**:

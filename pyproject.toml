@@ -7,16 +7,50 @@ build-backend = "setuptools.build_meta"
 # therefore the distribution is named gardener-os; the module and the
 # console script stay "gardener".
 name = "gardener-os"
-version = "0.4.0"
+version = "0.4.1"
 description = "Database-centric operating system for LLMs: find, get, put, run on a single SQLite substrate."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Lukas Geiger" }]
 requires-python = ">=3.10"
-keywords = ["llm", "agent", "sqlite", "memory", "operating-system"]
+keywords = [
+    "llm",
+    "agent",
+    "sqlite",
+    "memory",
+    "operating-system",
+    "fts5",
+    "bm25",
+    "local-first",
+    "zero-egress",
+    "knowledge-base",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database :: Database Engines/Servers",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: System :: Operating System",
+]
 
 [project.urls]
+Homepage = "https://github.com/ellmos-ai/gardener"
+Documentation = "https://github.com/ellmos-ai/gardener#readme"
 Repository = "https://github.com/ellmos-ai/gardener"
+Issues = "https://github.com/ellmos-ai/gardener/issues"
+Changelog = "https://github.com/ellmos-ai/gardener/blob/master/CHANGELOG.md"
+Security = "https://github.com/ellmos-ai/gardener/blob/master/SECURITY.md"
+Umbrella = "https://github.com/open-bricks"
 
 [project.scripts]
 gardener = "gardener:main"
@@ -26,4 +60,12 @@ py-modules = ["gardener", "i18n", "seed", "sources", "search_gui"]
 
 [tool.pytest.ini_options]
 pythonpath = "."
+testpaths = ["tests"]
 
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

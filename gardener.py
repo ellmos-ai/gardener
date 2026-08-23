@@ -14,20 +14,18 @@ Vier Funktionen. Eine Suche. Zwei Datenbanken.
 
 Konzept: KONZEPT.md
 """
-import json
 import hashlib
+import json
 import os
 import re
 import shutil
 import sqlite3
 import subprocess
 import sys
-import tempfile
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
-
+from typing import Dict, List, Optional, Tuple, Union
 
 # ---------------------------------------------------------------------------
 # Konfiguration
@@ -187,7 +185,7 @@ class Gardener:
 
         # Andere DB attachen für übergreifende Suche
         other = self.system_db_path if target == "user" else self.user_db_path
-        conn.execute(f"ATTACH DATABASE ? AS other", (str(other),))
+        conn.execute("ATTACH DATABASE ? AS other", (str(other),))
         return conn
 
     @contextmanager
@@ -358,9 +356,9 @@ class Gardener:
                 conditions = []
                 params = []
                 for t in tokens:
-                    l = f"%{t}%"
+                    like_param = f"%{t}%"
                     conditions.append("(e.name LIKE ? OR e.content LIKE ? OR e.tags LIKE ?)")
-                    params.extend([l, l, l])
+                    params.extend([like_param, like_param, like_param])
 
                 sql = f"""
                     SELECT e.*, '{db_label}' as source
@@ -1787,7 +1785,7 @@ def main():
             print(f"Tags:    {entry['tags']}")
             print(f"Source:  {entry.get('source', '?')}")
             print(f"Updated: {entry['updated']}")
-            print(f"---")
+            print("---")
             print(entry['content'][:2000])
         else:
             print(f"  Nicht gefunden: {name}")
