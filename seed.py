@@ -6,6 +6,8 @@ Gardener Seed -- Initiales Wissen für das System
 Füllt gardener.db mit Grundwissen, Beispiel-Tools und Regeln.
 Das sind die Bücher die schon im Haus stehen wenn das LLM einzieht.
 """
+import os
+
 from gardener import Gardener
 
 
@@ -458,11 +460,61 @@ Gardener ist dein LLM-natives Betriebssystem.
 - Absorbiere Dateien: `absorb("/pfad/zur/datei")`
 """)
 
+    # ------------------------------------------------------------------
+    # Regale: welche Ordner und Tabellen durchsuchbar sein sollen
+    # ------------------------------------------------------------------
+    _seed_observe_sources(af)
+
     # Ergebnis
     status = af.status()
     print("Seed abgeschlossen:")
     print(f"  System-DB: {status['system_entries']} Einträge")
     print(f"  User-DB:   {status['user_entries']} Einträge")
+
+
+def _seed_observe_sources(af, tiers=("base", "system")):
+    """Legt die Standard-observe-sources an, soweit sie auf diesem Host existieren.
+
+    Ohne diesen Schritt startet ein frisch aufgesetzter Gardener mit leerem Index:
+    welche Ordner und Tabellen durchsuchbar sein sollten, stuende nur in einer
+    lokalen Konfiguration, die nirgends abgebildet ist.
+
+    'base' ist agentenneutral (Transkripte, Memories, Skills), 'system' setzt die
+    ellmos-Infrastruktur voraus. Die Ebene 'user' bleibt aussen vor -- sie ist
+    hostspezifisch und wird bewusst von Hand gewaehlt.
+
+    Fehlende Quellen sind der Normalfall auf einem anderen System und werden
+    still uebersprungen. Bereits konfigurierte werden nie ueberschrieben.
+    """
+    import json
+    from pathlib import Path
+
+    ref_path = Path(__file__).parent / "sources.reference.json"
+    if not ref_path.exists():
+        print("  (kein sources.reference.json -- observe-sources uebersprungen)")
+        return
+
+    try:
+        ref = json.loads(ref_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"  (sources.reference.json unlesbar: {exc})")
+        return
+
+    have = set(af.observe_source_list())
+    added = skipped = 0
+    for tier in tiers:
+        for sid, cfg in (ref.get("tiers", {}).get(tier) or {}).items():
+            if sid in have:
+                continue
+            paths = [str(cfg[f]).split("*")[0].rstrip("/\\")
+                     for f in ("path", "db_path") if cfg.get(f)]
+            if paths and not all(Path(os.path.expanduser(p)).exists() for p in paths):
+                skipped += 1
+                continue
+            params = {k: v for k, v in cfg.items() if k != "kind"}
+            af.observe_source_add(sid, cfg["kind"], **params)
+            added += 1
+    print(f"  observe-sources: {added} angelegt, {skipped} auf diesem Host nicht vorhanden")
 
 
 if __name__ == "__main__":
