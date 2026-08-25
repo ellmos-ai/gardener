@@ -14,6 +14,7 @@ Vier Funktionen. Eine Suche. Zwei Datenbanken.
 
 Konzept: KONZEPT.md
 """
+import fnmatch
 import hashlib
 import json
 import os
@@ -589,7 +590,8 @@ class Gardener:
     # API: run()
     # ------------------------------------------------------------------
 
-    def run(self, name: str, input: Optional[Dict] = None) -> Tuple[bool, str]:
+    def run(self, name: str, input_data: Optional[Dict] = None,
+            timeout: Optional[int] = None, **kwargs) -> Tuple[bool, str]:
         """Führt den Code-Block eines Eintrags aus.
 
         Materialisiert den Code in einen Workspace, führt ihn aus,
@@ -597,11 +599,16 @@ class Gardener:
 
         Args:
             name: Name des Eintrags (muss type='tool' sein)
-            input: Parameter für die Ausführung
+            input_data: Parameter für die Ausführung (alias: input)
+            timeout: Maximale Laufzeit in Sekunden (Default: aus config oder 60s)
 
         Returns:
             (success, output) Tuple
         """
+        # Alias-Kompatibilität: wenn input=... als Keyword-Argument übergeben wird
+        if input_data is None and "input" in kwargs:
+            input_data = kwargs["input"]
+
         entry = self.get(name)
         if not entry:
             return False, f"Eintrag '{name}' nicht gefunden."
@@ -611,22 +618,26 @@ class Gardener:
         if not code:
             return False, f"Kein ausführbarer Code-Block in '{name}' gefunden."
 
+        # Timeout ermitteln: Parameter > config (run_timeout / runner_timeout) > 60
+        cfg_timeout = self.config.get("run_timeout", self.config.get("runner_timeout", 60))
+        actual_timeout = timeout if timeout is not None else cfg_timeout
+
         # Workspace materialisieren
         ws_dir = self.workspace_dir / name.replace("/", "_")
         ws_dir.mkdir(parents=True, exist_ok=True)
         script_path = ws_dir / "run.py"
 
         # Runner-Script erstellen
-        runner = self._build_runner(code, input or {})
+        runner = self._build_runner(code, input_data or {})
         script_path.write_text(runner, encoding="utf-8")
 
-        # Ausfuehren
+        # Ausführen
         try:
             result = subprocess.run(
                 [sys.executable, str(script_path)],
                 capture_output=True,
                 text=True,
-                timeout=60,
+                timeout=actual_timeout,
                 cwd=str(ws_dir),
                 env={**os.environ, "PYTHONIOENCODING": "utf-8"},
             )
@@ -639,7 +650,7 @@ class Gardener:
             return True, output.strip()
 
         except subprocess.TimeoutExpired:
-            return False, f"Timeout: '{name}' hat länger als 60s gedauert."
+            return False, f"Timeout: '{name}' hat länger als {actual_timeout}s gedauert."
         except Exception as e:
             return False, f"Fehler bei Ausführung von '{name}': {e}"
 
@@ -1238,7 +1249,9 @@ class Gardener:
                 "selective": "Nur .absorber/ wird absorbiert (Default)",
                 "always_absorb": "Alles im Home-Ordner wird absorbiert",
                 "observe_only": "Nichts absorbieren, nur beobachten"
-            }
+            },
+            "run_timeout": 60,
+            "exclude_patterns": []
         }
         config_path.write_text(
             json.dumps(default, indent=2, ensure_ascii=False) + "\n",
@@ -1524,22 +1537,48 @@ class Gardener:
     # Hilfsfunktionen
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _is_internal(rel: str) -> bool:
-        """True if a path relative to home points into an internal runtime dir
-        or is an internal top-level file (config.json).
+    def _is_internal(self, rel: Union[str, Path, None] = None,
+                     extra_excludes: Optional[List[str]] = None) -> bool:
+        """True if a path relative to home points into an internal runtime dir,
+        is an internal top-level file (config.json), or matches configured excludes.
 
         Shared skip logic for observe() and sync(). Compares whole path
         segments, not string prefixes — sibling names like
         '.absorber-notes.txt' are NOT skipped.
         """
-        parts = str(rel).replace("\\", "/").split("/")
+        if rel is None and isinstance(self, (str, Path)):
+            rel_path = str(self)
+            cfg_excludes = []
+        else:
+            rel_path = str(rel)
+            cfg_excludes = (
+                getattr(self, "config", {}).get("exclude_patterns", [])
+                if hasattr(self, "config") and isinstance(getattr(self, "config"), dict)
+                else []
+            )
+
+        parts = rel_path.replace("\\", "/").split("/")
         if any(p.lower() in INTERNAL_SKIP_PREFIXES for p in parts):
             return True
         if len(parts) == 1 and parts[0] in INTERNAL_SKIP_FILES:
             return True
         # Credential-bearing filenames (.npmrc, *.pem, auth.json, ...)
-        return bool(_is_excluded_path and _is_excluded_path(rel))
+        if bool(_is_excluded_path and _is_excluded_path(rel_path)):
+            return True
+
+        patterns = []
+        if cfg_excludes and isinstance(cfg_excludes, (list, tuple)):
+            patterns.extend(cfg_excludes)
+        if extra_excludes and isinstance(extra_excludes, (list, tuple)):
+            patterns.extend(extra_excludes)
+
+        if patterns:
+            rel_posix = rel_path.replace("\\", "/")
+            for pat in patterns:
+                if fnmatch.fnmatch(rel_posix, pat) or fnmatch.fnmatch(parts[-1], pat) or any(fnmatch.fnmatch(p, pat) for p in parts):
+                    return True
+
+        return False
 
     @staticmethod
     def _safe_filename(raw, fallback: str) -> str:
@@ -1575,19 +1614,19 @@ class Gardener:
         return None
 
     def _build_runner(self, code: str, input_data: Dict) -> str:
-        """Baut ein ausfuehrbares Runner-Script."""
+        """Baut ein ausführbares Runner-Script."""
         input_json = json.dumps(input_data, ensure_ascii=False)
         return f'''# -*- coding: utf-8 -*-
 # Auto-generated Gardener Runner
 import json
 import sys
 
-input = json.loads({repr(input_json)})
+payload = input = json.loads({repr(input_json)})
 
 {code}
 
 if 'execute' in dir():
-    result = execute(input)
+    result = execute(payload)
     if result is not None:
         print(json.dumps(result, ensure_ascii=False, indent=2))
 '''

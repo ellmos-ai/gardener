@@ -2,6 +2,7 @@ import contextlib
 import gc
 import importlib
 import io
+import json
 import os
 import re
 import shutil
@@ -242,6 +243,101 @@ class TestGardenerCore(GardenerTempCase):
         self.assertEqual(
             sorted(entry["name"] for entry in entries), sorted(names)
         )
+
+    def test_run_tool_success_and_payload_execution(self):
+        self.af.put(
+            "calc-add",
+            type="tool",
+            target="system",
+            content="""# Calculator
+```python
+def execute(payload):
+    a = payload.get("a", 0)
+    b = payload.get("b", 0)
+    return {"sum": a + b}
+```
+""",
+        )
+        ok, output = self.af.run("calc-add", input_data={"a": 17, "b": 25})
+        self.assertTrue(ok)
+        data = json.loads(output)
+        self.assertEqual(data["sum"], 42)
+
+        # Backwards compatibility with input= keyword argument
+        ok_kw, output_kw = self.af.run("calc-add", input={"a": 3, "b": 4})
+        self.assertTrue(ok_kw)
+        self.assertEqual(json.loads(output_kw)["sum"], 7)
+
+    def test_run_tool_configurable_timeout_from_param_and_config(self):
+        self.af.put(
+            "sleeper-tool",
+            type="tool",
+            target="system",
+            content="""# Sleeper
+```python
+import time
+def execute(payload):
+    time.sleep(2.0)
+    return {"status": "done"}
+```
+""",
+        )
+        # Timeout via parameter (1 second)
+        ok, output = self.af.run("sleeper-tool", timeout=1)
+        self.assertFalse(ok)
+        self.assertIn("Timeout: 'sleeper-tool' hat länger als 1s gedauert.", output)
+
+        # Timeout via config
+        self.af.config["run_timeout"] = 1
+        ok_cfg, output_cfg = self.af.run("sleeper-tool")
+        self.assertFalse(ok_cfg)
+        self.assertIn("Timeout: 'sleeper-tool' hat länger als 1s gedauert.", output_cfg)
+
+    def test_run_tool_error_handling_missing_and_invalid_code(self):
+        ok, output = self.af.run("nonexistent-tool")
+        self.assertFalse(ok)
+        self.assertIn("nicht gefunden", output)
+
+        self.af.put("no-code-tool", content="Nur Markdown ohne Python-Block", type="tool")
+        ok2, output2 = self.af.run("no-code-tool")
+        self.assertFalse(ok2)
+        self.assertIn("Kein ausführbarer Code-Block", output2)
+
+    def test_observe_and_sync_custom_exclude_patterns(self):
+        home = Path(os.environ["GARDENER_HOME"])
+        (home / "valid_doc.md").write_text("wichtiger Inhalt", encoding="utf-8")
+        (home / "cache.bak").write_text("altes backup", encoding="utf-8")
+        (home / "temp_scratch.txt").write_text("scratch", encoding="utf-8")
+        build_dir = home / "build"
+        build_dir.mkdir(exist_ok=True)
+        (build_dir / "target.log").write_text("build log", encoding="utf-8")
+
+        self.af.config["exclude_patterns"] = ["*.bak", "temp_*", "build/*"]
+
+        observed = self.af.observe()
+        names = [entry["name"] for entry in observed]
+
+        self.assertIn("observed/valid_doc.md", names)
+        self.assertNotIn("observed/cache.bak", names)
+        self.assertNotIn("observed/temp_scratch.txt", names)
+        self.assertNotIn("observed/build/target.log", names)
+
+        # Sync should also respect configured excludes
+        sync_res = self.af.sync()
+        self.assertEqual(sync_res["observed"], 1)
+        db_entries = self.af.list(type="observed")
+        db_names = [e["name"] for e in db_entries]
+        self.assertEqual(db_names, ["observed/valid_doc.md"])
+
+    def test_is_internal_custom_patterns_and_static_call_compatibility(self):
+        # Static invocation compatibility
+        self.assertTrue(self.gardener.Gardener._is_internal(".absorber/file.txt"))
+        self.assertTrue(self.gardener.Gardener._is_internal("config.json"))
+        self.assertFalse(self.gardener.Gardener._is_internal("normal.md"))
+
+        # Extra excludes parameter
+        self.assertTrue(self.af._is_internal("foo.tmp", extra_excludes=["*.tmp"]))
+        self.assertFalse(self.af._is_internal("foo.md", extra_excludes=["*.tmp"]))
 
     def test_seeded_german_user_texts_use_real_umlauts(self):
         import seed

@@ -2,11 +2,23 @@
 
 ## 2026-08-25 [0.4.2]
 
+- **Configurable Tool Execution Timeouts (`run()` & `config.json`)**:
+  - Added optional `timeout: Optional[int] = None` parameter to `Gardener.run()`, falling back to `run_timeout` or `runner_timeout` in `config.json` (default: 60s).
+  - Improved timeout error reporting format with exact duration: `Timeout: '{name}' hat länger als {timeout}s gedauert.`.
+- **Safe Runner Scope & Parameter Aliasing**:
+  - Replaced builtin `input` shadowing in `Gardener.run(name, input_data=None, timeout=None)` signature with full backward compatibility via `input_data` and keyword argument `input`.
+  - Upgraded runner script generation (`_build_runner`) to define both `payload` and `input` (`payload = input = json.loads(...)`), cleanly supporting tools executing via `execute(payload)` or `execute(input)`.
+- **Configurable Filesystem Exclude Patterns (`exclude_patterns`)**:
+  - Added `exclude_patterns` list in `config.json` and upgraded `_is_internal()` to filter out custom fnmatch / glob patterns across `observe()` and `sync()`.
+  - Maintained full static and instance method compatibility for `_is_internal()`.
 - **Freiwilligkeit der observe-source-Seedung (`seed.py`)** (T-20260825-329696802):
   - Standalone-sicherer Default: `_seed_observe_sources()` seedet ohne explizite Zustimmung nur noch die agentenneutrale `base`-Ebene (Transkripte/Memories/Skills/Commands, gilt fuer jeden Agenten-Nutzer). Die `system`-Ebene (setzt ellmos-Infrastruktur wie USMC/taskplan/policies/tickets voraus) lief zuvor unbedingt mit, sobald ein Pfad zufaellig auf dem Host existierte -- jetzt braucht sie ausdruecklich `GARDENER_SEED_ECOSYSTEM_SOURCES=1`.
   - Voller Abschalter: `GARDENER_SEED_OBSERVE_SOURCES=0` ueberspringt die Seedung komplett, auch die `base`-Ebene -- gilt unbedingt, auch bei explizit uebergebenem `tiers`-Argument.
-  - `_default_seed_tiers()` neu extrahiert; 5 neue Tests in `tests/test_seed_observe_sources.py` (Default ohne `system`, explizite Zustimmung, voller Abschalter, Abschalter-Vorrang vor explizitem `tiers`, `_default_seed_tiers()` direkt). Gesamtsuite 130/130 gruen.
-  - Gleiche Neutralitaets-/Freiwilligkeitsphilosophie wie `ellmos-skill-creator` (neutral-aber-sensitiv): allein lauffaehig per Default, Oekosystem-Anbindung ist ein bewusstes Opt-in, kein stiller Default.
+  - `_default_seed_tiers()` neu extrahiert; 5 neue Tests in `tests/test_seed_observe_sources.py` (Default ohne `system`, explizite Zustimmung, voller Abschalter, Abschalter-Vorrang vor explizitem `tiers`, `_default_seed_tiers()` direkt).
+- **Test Suite & Metadata Expansion**:
+  - Added comprehensive unit tests in `tests/test_gardener_core.py` and `tests/test_seed_observe_sources.py`.
+  - Expanded test suite to 135 passing tests (100% green).
+  - Synchronized metadata, documentation, and badges across `pyproject.toml`, `README.md`, `README_de.md`, and `llms.txt`.
 
 ## 2026-08-23 [0.4.1]
 
