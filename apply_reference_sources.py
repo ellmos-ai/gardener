@@ -13,8 +13,13 @@ Grundsaetze:
 
   python apply_reference_sources.py [--tiers base,system] [--apply]
 """
-import argparse, json, os, sys
+
+import argparse
+import json
+import os
+import sys
 from pathlib import Path
+
 
 def source_paths(cfg):
     """Pfade, deren Existenz ueber 'ueberspringen oder anlegen' entscheidet."""
