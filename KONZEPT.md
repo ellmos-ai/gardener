@@ -692,6 +692,15 @@ gardener session-end <text>     Session-Bericht speichern
 
 ## Tasks: Kein separates System (Design-Entscheidung)
 
+> **Sekundärweg — primäre Wahrheit ist task-master, Entscheidung E10
+> (2026-08-14).** Die hier beschriebene `type='task'`-Fähigkeit existiert
+> weiterhin im Code und bleibt nutzbar, ist aber NICHT der zentrale
+> Task-Speicher des Systems. Wer produktiv mit Tasks arbeitet, nutzt
+> `task-master` (`~/.taskplan/taskplan.db`, Tabelle `rinnsal_tasks`) —
+> siehe `.MEMORY/ARCHITECTURE.md`. Dieser Abschnitt bleibt als
+> Design-Dokumentation stehen, damit klar ist, warum Gardener die
+> Fähigkeit überhaupt hat, nicht als Aufruf, sie primär zu nutzen.
+
 Tasks sind **keine eigene Komponente** — sie sind Einträge vom Typ `task` in
 der `everything`-Tabelle. Das ist Absicht und ein Kernprinzip von Gardener.
 
@@ -784,7 +793,7 @@ Die Wahrheit bleibt in der DB. Die Datei ist nur ein Snapshot für menschliche A
 - ~~Große Dateien?~~ → Halde (lokaler Blob-Ordner) + Index in DB
 - ~~Ein-/Ausgang?~~ → .absorber/ (Briefkasten) + .output/ (Ausgabe)
 - ~~Sync-Modi?~~ → config.json: selective / always_absorb / observe_only
-- ~~Task-System?~~ → Kein separates System, Tasks = type='task' in everything
+- ~~Task-System?~~ → Kein separates System, Tasks = type='task' in everything (Sekundärweg — primäre Wahrheit ist task-master, E10)
 - ~~Memory-System?~~ → Kein separates System, Memory/Lessons/Sessions = Typen in everything
 - ~~Dematerialize?~~ → Gibt es nicht separat, absorb() IST Dematerialisierung
 - ~~Konsolidierung?~~ → Einfach: Decay + Forget, keine Pipeline
