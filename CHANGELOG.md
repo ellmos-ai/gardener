@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-25 [0.4.2]
+
+- **Freiwilligkeit der observe-source-Seedung (`seed.py`)** (T-20260825-329696802):
+  - Standalone-sicherer Default: `_seed_observe_sources()` seedet ohne explizite Zustimmung nur noch die agentenneutrale `base`-Ebene (Transkripte/Memories/Skills/Commands, gilt fuer jeden Agenten-Nutzer). Die `system`-Ebene (setzt ellmos-Infrastruktur wie USMC/taskplan/policies/tickets voraus) lief zuvor unbedingt mit, sobald ein Pfad zufaellig auf dem Host existierte -- jetzt braucht sie ausdruecklich `GARDENER_SEED_ECOSYSTEM_SOURCES=1`.
+  - Voller Abschalter: `GARDENER_SEED_OBSERVE_SOURCES=0` ueberspringt die Seedung komplett, auch die `base`-Ebene -- gilt unbedingt, auch bei explizit uebergebenem `tiers`-Argument.
+  - `_default_seed_tiers()` neu extrahiert; 5 neue Tests in `tests/test_seed_observe_sources.py` (Default ohne `system`, explizite Zustimmung, voller Abschalter, Abschalter-Vorrang vor explizitem `tiers`, `_default_seed_tiers()` direkt). Gesamtsuite 130/130 gruen.
+  - Gleiche Neutralitaets-/Freiwilligkeitsphilosophie wie `ellmos-skill-creator` (neutral-aber-sensitiv): allein lauffaehig per Default, Oekosystem-Anbindung ist ein bewusstes Opt-in, kein stiller Default.
+
 ## 2026-08-23 [0.4.1]
 
 - **Multi-OS GitHub Actions CI Matrix (`.github/workflows/ci.yml`)**:

@@ -7,7 +7,7 @@
 # gardener — Database-Based OS for LLMs
 
 [![CI](https://github.com/ellmos-ai/gardener/actions/workflows/ci.yml/badge.svg)](https://github.com/ellmos-ai/gardener/actions/workflows/ci.yml)
-[![Version: 0.4.1](https://img.shields.io/badge/version-0.4.1-blue.svg)](https://github.com/ellmos-ai/gardener)
+[![Version: 0.4.2](https://img.shields.io/badge/version-0.4.2-blue.svg)](https://github.com/ellmos-ai/gardener)
 [![Python 3.10-3.13](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
 [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey.svg)](https://github.com/ellmos-ai/gardener)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -24,7 +24,7 @@
 
 **🇩🇪 [Deutsche Version](README_de.md)**
 
-> Status: Prototype (v0.4.1) | Author: Lukas Geiger + Claude
+> Status: Prototype (v0.4.2) | Author: Lukas Geiger + Claude
 
 ## What is Gardener?
 
@@ -479,6 +479,19 @@ entries that were curated on purpose.
 ```bash
 python seed.py    # Populates gardener.db with base knowledge and example tools
 ```
+
+Seeding also registers a default set of `observe-sources` (which folders/tables become
+searchable) from `sources.reference.json`, so `find()` isn't empty on first use. This is
+voluntary at two levels, so a standalone install (no ellmos ecosystem) stays unaffected
+unless you opt in:
+
+- **`base` tier** (agent-neutral: transcripts, memories, skills, commands) is on by default
+  -- that's the point of a fresh Gardener. Missing paths are silently skipped, never an error.
+- **`system` tier** (assumes ellmos infrastructure: USMC, taskplan, policies, tickets) is
+  **off by default** and needs explicit opt-in: `GARDENER_SEED_ECOSYSTEM_SOURCES=1`.
+- To skip observe-source seeding entirely (including `base`): `GARDENER_SEED_OBSERVE_SOURCES=0`.
+
+Existing sources are never overwritten either way.
 
 ## Comparison: Gardener vs Rinnsal
 

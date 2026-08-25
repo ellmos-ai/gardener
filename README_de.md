@@ -5,7 +5,7 @@
 # gardener — Database-Based OS for LLMs
 
 [![CI](https://github.com/ellmos-ai/gardener/actions/workflows/ci.yml/badge.svg)](https://github.com/ellmos-ai/gardener/actions/workflows/ci.yml)
-[![Version: 0.4.1](https://img.shields.io/badge/version-0.4.1-blue.svg)](https://github.com/ellmos-ai/gardener)
+[![Version: 0.4.2](https://img.shields.io/badge/version-0.4.2-blue.svg)](https://github.com/ellmos-ai/gardener)
 [![Python 3.10-3.13](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
 [![Plattformen](https://img.shields.io/badge/plattformen-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey.svg)](https://github.com/ellmos-ai/gardener)
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-yellow.svg)](LICENSE)
@@ -22,7 +22,7 @@
 
 **🇬🇧 [English Version](README.md)**
 
-> Status: Prototyp (v0.4.1) | Autor: Lukas Geiger + Claude
+> Status: Prototyp (v0.4.2) | Autor: Lukas Geiger + Claude
 
 ## Was ist Gardener?
 
@@ -483,8 +483,22 @@ nicht überschwemmt.
 ## Seeding
 
 ```bash
-python seed.py    # Populates gardener.db with base knowledge and example tools
+python seed.py    # Fuellt gardener.db mit Grundwissen und Beispiel-Tools
 ```
+
+Beim Seeden wird zusaetzlich ein Standard-Set an `observe-sources` angelegt (welche Ordner/
+Tabellen durchsuchbar sind), aus `sources.reference.json` -- damit `find()` nicht leer startet.
+Das ist auf zwei Ebenen freiwillig, ein Standalone-Install (ohne ellmos-Oekosystem) bleibt also
+unberuehrt, solange nicht ausdruecklich zugestimmt wird:
+
+- **`base`-Ebene** (agentenneutral: Transkripte, Memories, Skills, Commands) ist Default-on --
+  das ist der Zweck eines frischen Gardener. Fehlende Pfade werden still uebersprungen, nie ein
+  Fehler.
+- **`system`-Ebene** (setzt ellmos-Infrastruktur voraus: USMC, taskplan, policies, tickets) ist
+  **standardmaessig aus** und braucht ausdrueckliche Zustimmung: `GARDENER_SEED_ECOSYSTEM_SOURCES=1`.
+- Um die observe-source-Seedung ganz zu ueberspringen (auch `base`): `GARDENER_SEED_OBSERVE_SOURCES=0`.
+
+Bereits konfigurierte Quellen werden in beiden Faellen nie ueberschrieben.
 
 ## Vergleich: Gardener vs Rinnsal
 

@@ -99,3 +99,68 @@ def test_kaputte_referenzdatei_bricht_nicht_ab(ref_dir):
     g = FakeGardener()
     seed._seed_observe_sources(g)
     assert g.added == []
+
+
+# ---------------------------------------------------------------------------
+# Freiwilligkeit (T-20260825-329696802): standalone-sichere Defaults + Abschaltbarkeit
+# ---------------------------------------------------------------------------
+
+def test_system_ebene_ist_ohne_zustimmung_nicht_default(ref_dir, tmp_path, monkeypatch):
+    """'system' setzt ellmos-Infrastruktur voraus und darf nicht automatisch
+    mitlaufen, nur weil ein Pfad zufaellig existiert (Standalone-Sicherheit)."""
+    monkeypatch.delenv("GARDENER_SEED_ECOSYSTEM_SOURCES", raising=False)
+    real = tmp_path / "vorhanden"
+    real.mkdir()
+    _write_ref(ref_dir, {
+        "base": {"b": {"kind": "markdown_dir", "path": str(real)}},
+        "system": {"s": {"kind": "markdown_dir", "path": str(real)}},
+    })
+    g = FakeGardener()
+    seed._seed_observe_sources(g)  # kein explizites tiers -> Default-Ableitung
+    assert g.added == ["b"], "system-Ebene braucht explizite Zustimmung, kein Default"
+
+
+def test_system_ebene_mit_ausdruecklicher_zustimmung(ref_dir, tmp_path, monkeypatch):
+    monkeypatch.setenv("GARDENER_SEED_ECOSYSTEM_SOURCES", "1")
+    real = tmp_path / "vorhanden"
+    real.mkdir()
+    _write_ref(ref_dir, {
+        "base": {"b": {"kind": "markdown_dir", "path": str(real)}},
+        "system": {"s": {"kind": "markdown_dir", "path": str(real)}},
+    })
+    g = FakeGardener()
+    seed._seed_observe_sources(g)
+    assert set(g.added) == {"b", "s"}
+
+
+def test_komplett_abschaltbar(ref_dir, tmp_path, monkeypatch):
+    """GARDENER_SEED_OBSERVE_SOURCES=0 ueberspringt auch die agentenneutrale
+    'base'-Ebene -- volle Freiwilligkeit, nicht nur ein Teil-Opt-out."""
+    monkeypatch.setenv("GARDENER_SEED_OBSERVE_SOURCES", "0")
+    real = tmp_path / "vorhanden"
+    real.mkdir()
+    _write_ref(ref_dir, {"base": {"b": {"kind": "markdown_dir", "path": str(real)}}})
+    g = FakeGardener()
+    seed._seed_observe_sources(g)
+    assert g.added == []
+
+
+def test_voller_abschalter_wirkt_auch_bei_explizitem_tiers(ref_dir, tmp_path, monkeypatch):
+    """GARDENER_SEED_OBSERVE_SOURCES=0 ist das staerkste Signal -- es gilt
+    UNBEDINGT, auch wenn ein Aufrufer (z.B. ein Test) tiers explizit setzt."""
+    monkeypatch.setenv("GARDENER_SEED_OBSERVE_SOURCES", "0")
+    real = tmp_path / "vorhanden"
+    real.mkdir()
+    _write_ref(ref_dir, {"base": {"b": {"kind": "markdown_dir", "path": str(real)}}})
+    g = FakeGardener()
+    seed._seed_observe_sources(g, tiers=("base",))
+    assert g.added == [], "GARDENER_SEED_OBSERVE_SOURCES=0 muss auch bei explizitem tiers wirken"
+
+
+def test_default_seed_tiers_liest_env(monkeypatch):
+    monkeypatch.delenv("GARDENER_SEED_ECOSYSTEM_SOURCES", raising=False)
+    assert seed._default_seed_tiers() == ("base",)
+    monkeypatch.setenv("GARDENER_SEED_ECOSYSTEM_SOURCES", "1")
+    assert seed._default_seed_tiers() == ("base", "system")
+    monkeypatch.setenv("GARDENER_SEED_ECOSYSTEM_SOURCES", "0")
+    assert seed._default_seed_tiers() == ("base",)

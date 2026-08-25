@@ -1,6 +1,6 @@
 # Gardener - Database-Based Operating System for LLMs
 
-Last-checked: 2026-08-23
+Last-checked: 2026-08-25
 Canonical repository: https://github.com/ellmos-ai/gardener
 
 > Gardener is a database-centric operating system for LLMs: everything -- knowledge, tools, memories, tasks -- lives in a single searchable SQLite database, exposed through four primitive operations (find, get, put, run). A minimalist counterpart to file-centric agent systems like BACH.

@@ -32,7 +32,7 @@ class TestMetadataParity(unittest.TestCase):
         match = re.search(r'version\s*=\s*"([^"]+)"', self.pyproject)
         self.assertIsNotNone(match, "pyproject.toml missing version")
         version = match.group(1)
-        self.assertEqual(version, "0.4.1")
+        self.assertEqual(version, "0.4.2")
 
         # Check READMEs reference version
         self.assertIn(f"v{version}", self.readme_en)

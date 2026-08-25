@@ -472,7 +472,27 @@ Gardener ist dein LLM-natives Betriebssystem.
     print(f"  User-DB:   {status['user_entries']} Einträge")
 
 
-def _seed_observe_sources(af, tiers=("base", "system")):
+def _default_seed_tiers():
+    """Welche Ebenen ohne explizite Zustimmung angelegt werden.
+
+    Freiwilligkeit hat zwei Stufen (Ticket T-20260825-329696802): 'base' ist
+    agentenneutral (Transkripte, Memories, Skills, Commands -- das gilt fuer
+    JEDEN Agenten-Nutzer, ellmos oder nicht, und bleibt deshalb Default-on,
+    das ist der eigentliche Zweck von Gardener). 'system' setzt dagegen
+    ellmos-Infrastruktur voraus (USMC, taskplan, policies, tickets) -- eine
+    echte Oekosystem-Kopplung, die NICHT automatisch mitlaeuft, nur weil ein
+    Pfad zufaellig existiert. Sie braucht ausdrueckliche Zustimmung:
+    GARDENER_SEED_ECOSYSTEM_SOURCES=1.
+    """
+    tiers = ["base"]
+    if os.environ.get("GARDENER_SEED_ECOSYSTEM_SOURCES", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    ):
+        tiers.append("system")
+    return tuple(tiers)
+
+
+def _seed_observe_sources(af, tiers=None):
     """Legt die Standard-observe-sources an, soweit sie auf diesem Host existieren.
 
     Ohne diesen Schritt startet ein frisch aufgesetzter Gardener mit leerem Index:
@@ -485,9 +505,28 @@ def _seed_observe_sources(af, tiers=("base", "system")):
 
     Fehlende Quellen sind der Normalfall auf einem anderen System und werden
     still uebersprungen. Bereits konfigurierte werden nie ueberschrieben.
+
+    Freiwilligkeit (T-20260825-329696802): Wer den Schritt ganz ueberspringen
+    will -- auch die agentenneutrale 'base'-Ebene --, setzt
+    GARDENER_SEED_OBSERVE_SOURCES=0; das gilt UNBEDINGT, auch bei explizit
+    uebergebenem `tiers` (staerkstes Signal, kein Aufrufer soll es versehentlich
+    umgehen koennen). Wer explizit auch die ellmos-Infrastruktur ('system')
+    mitanlegen will, setzt GARDENER_SEED_ECOSYSTEM_SOURCES=1 (Default: aus --
+    siehe _default_seed_tiers); dieser zweite Schalter wirkt NUR, wenn `tiers`
+    nicht explizit uebergeben wurde (ein expliziter Aufruf, z.B. aus Tests,
+    bestimmt die Tier-Auswahl selbst).
     """
     import json
     from pathlib import Path
+
+    if os.environ.get("GARDENER_SEED_OBSERVE_SOURCES", "").strip().lower() in (
+        "0", "false", "no", "off",
+    ):
+        print("  (observe-sources uebersprungen: GARDENER_SEED_OBSERVE_SOURCES=0)")
+        return
+
+    if tiers is None:
+        tiers = _default_seed_tiers()
 
     ref_path = Path(__file__).parent / "sources.reference.json"
     if not ref_path.exists():
