@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Add the existing `_control-center/_PLANS` register as the opt-in system-tier
+  `plans-register` observe source. Gardener indexes its three metadata/report
+  files read-only and does not become the plan authority or a second plan store.
+- Add a contract test for the exact source path, file allowlist, and plan/governance
+  tags.
+
 ## 2026-08-25 [0.4.2]
 
 - **Configurable Tool Execution Timeouts (`run()` & `config.json`)**:

@@ -58,8 +58,8 @@ class TestMetadataParity(unittest.TestCase):
         self.assertIn("actions/workflows/ci.yml/badge.svg", self.readme_de)
 
     def test_llms_txt_consistency(self):
-        self.assertIn("Last-checked: 2026-08-25", self.llms_txt)
-        self.assertIn("135 passing tests", self.llms_txt)
+        self.assertIn("Last-checked: 2026-08-29", self.llms_txt)
+        self.assertIn("136 passing tests", self.llms_txt)
         self.assertIn("https://github.com/ellmos-ai/gardener", self.llms_txt)
         self.assertIn("ellmos-ai/gardener", self.llms_txt)
         self.assertIn("SECURITY.md", self.llms_txt)
