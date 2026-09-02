@@ -495,7 +495,9 @@ unberuehrt, solange nicht ausdruecklich zugestimmt wird:
   das ist der Zweck eines frischen Gardener. Fehlende Pfade werden still uebersprungen, nie ein
   Fehler.
 - **`system`-Ebene** (setzt ellmos-Infrastruktur voraus: USMC, taskplan, policies, tickets) ist
-  **standardmaessig aus** und braucht ausdrueckliche Zustimmung: `GARDENER_SEED_ECOSYSTEM_SOURCES=1`.
+  **standardmäßig aus** und braucht ausdrückliche Zustimmung: `GARDENER_SEED_ECOSYSTEM_SOURCES=1`.
+  Sie enthält die Metadaten und den Lesebericht aus `_control-center/_PLANS` als rein lesende
+  Quelle `plans-register`; kanonisch bleiben die jeweiligen Plandokumente.
 - Um die observe-source-Seedung ganz zu ueberspringen (auch `base`): `GARDENER_SEED_OBSERVE_SOURCES=0`.
 
 Bereits konfigurierte Quellen werden in beiden Faellen nie ueberschrieben.

@@ -164,3 +164,16 @@ def test_default_seed_tiers_liest_env(monkeypatch):
     assert seed._default_seed_tiers() == ("base", "system")
     monkeypatch.setenv("GARDENER_SEED_ECOSYSTEM_SOURCES", "0")
     assert seed._default_seed_tiers() == ("base",)
+
+
+def test_referenzset_enthaelt_das_beschlossene_plans_register():
+    reference = Path(seed.__file__).resolve().parent / "sources.reference.json"
+    data = json.loads(reference.read_text(encoding="utf-8"))
+    plans = data["tiers"]["system"]["plans-register"]
+
+    assert plans == {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/_control-center/_PLANS",
+        "patterns": ["README.md", "PLANS-REPORT.md", "plans-register.json"],
+        "extra_tags": ["plan", "governance-register"],
+    }

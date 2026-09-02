@@ -488,7 +488,9 @@ unless you opt in:
 - **`base` tier** (agent-neutral: transcripts, memories, skills, commands) is on by default
   -- that's the point of a fresh Gardener. Missing paths are silently skipped, never an error.
 - **`system` tier** (assumes ellmos infrastructure: USMC, taskplan, policies, tickets) is
-  **off by default** and needs explicit opt-in: `GARDENER_SEED_ECOSYSTEM_SOURCES=1`.
+  **off by default** and needs explicit opt-in: `GARDENER_SEED_ECOSYSTEM_SOURCES=1`. It
+  includes the read-only `_control-center/_PLANS` metadata/report source as
+  `plans-register`; the canonical plans remain in their owning documents.
 - To skip observe-source seeding entirely (including `base`): `GARDENER_SEED_OBSERVE_SOURCES=0`.
 
 Existing sources are never overwritten either way.

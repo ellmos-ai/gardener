@@ -167,6 +167,19 @@
           "policy"
         ]
       },
+      "plans-register": {
+        "kind": "markdown_dir",
+        "path": "~/OneDrive/.TOPICS/_control-center/_PLANS",
+        "patterns": [
+          "README.md",
+          "PLANS-REPORT.md",
+          "plans-register.json"
+        ],
+        "extra_tags": [
+          "plan",
+          "governance-register"
+        ]
+      },
       "taskplan-tasks": {
         "kind": "sqlite_table",
         "db_path": "~/.taskplan/taskplan.db",
