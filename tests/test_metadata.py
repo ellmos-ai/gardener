@@ -297,6 +297,18 @@ class TestMetadataParity(unittest.TestCase):
         self.assertIn("Non-Elevation", self.security)
         self.assertIn("https://github.com/ellmos-ai/gardener/security/advisories", self.security)
 
+    def test_pyproject_project_table_structure(self):
+        # keywords/classifiers placed after [project.optional-dependencies] are parsed
+        # as extras and break `pip install -e .` (pep508 error).
+        try:
+            import tomllib
+        except ModuleNotFoundError:  # Python 3.10
+            self.skipTest("tomllib requires Python 3.11+")
+        project = tomllib.loads(self.pyproject)["project"]
+        self.assertEqual(set(project["optional-dependencies"]), {"dev", "test"})
+        self.assertIn("Development Status :: 4 - Beta", project["classifiers"])
+        self.assertIn("sqlite", project["keywords"])
+
     def test_pyproject_pep621_classifiers_and_urls(self):
         self.assertIn("classifiers = [", self.pyproject)
         self.assertIn("Development Status :: 4 - Beta", self.pyproject)
