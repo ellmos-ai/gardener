@@ -16,15 +16,6 @@ authors = [{ name = "Lukas Geiger" }]
 requires-python = ">=3.10"
 dependencies = []
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-    "ruff>=0.5",
-]
-test = [
-    "pytest>=7.0",
-]
-
 keywords = [
     "agent-framework",
     "ai-agent",
@@ -62,6 +53,15 @@ classifiers = [
     "Topic :: Database :: Database Engines/Servers",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
     "Topic :: System :: Operating System",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.5",
+]
+test = [
+    "pytest>=7.0",
 ]
 
 [project.urls]
